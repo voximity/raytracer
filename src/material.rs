@@ -1,6 +1,6 @@
 use crate::math::Vector3;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Color {
     pub r: u8,
     pub g: u8,
@@ -29,6 +29,12 @@ impl Color {
     /// Instantiate a Color from a Vector3. Useful for checking normals.
     pub fn from_normal(n: Vector3) -> Self {
         Self::newf(n.x / 2. + 0.5, n.y / 2. + 0.5, n.z / 2. + 0.5)
+    }
+}
+
+impl From<Vector3> for Color {
+    fn from(v: Vector3) -> Self {
+        Self::newf(v.x, v.y, v.z)
     }
 }
 

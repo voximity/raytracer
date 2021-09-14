@@ -1,14 +1,38 @@
+use std::{
+    cmp,
+    collections::HashMap,
+    sync::{Arc, Mutex, RwLock},
+};
+
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
 use crate::{
     camera::Camera,
+    lighting::Light,
     material::Color,
-    math::Ray,
+    math::{Ray, Vector3},
     object::{Hit, SceneObject},
 };
 
-#[derive(Default)]
+/// A very small value, close to zero, to prevent weird overlapping.
+pub const EPSILON: f64 = 0.000001;
+
 pub struct Scene {
     pub objects: Vec<Box<dyn SceneObject>>,
+    pub lights: Vec<Box<dyn Light>>,
     pub camera: Camera,
+    pub ambient: Color,
+}
+
+impl Default for Scene {
+    fn default() -> Self {
+        Self {
+            objects: Vec::new(),
+            lights: Vec::new(),
+            camera: Camera::default(),
+            ambient: Color::new(40, 40, 40),
+        }
+    }
 }
 
 impl Scene {
@@ -34,6 +58,12 @@ impl Scene {
         v
     }
 
+    /// Cast a ray and return one optional object.
+    pub fn cast_ray_once(&self, ray: &Ray) -> Option<(&Box<dyn SceneObject>, Hit)> {
+        let hit = self.cast_ray(ray);
+        hit.into_iter().next()
+    }
+
     /// Trace out a pixel, where top-left of the image is (0, 0).
     /// This function is run many times in parallel.
     pub fn trace_pixel(&self, x: i32, y: i32) -> Color {
@@ -53,29 +83,44 @@ impl Scene {
             self.camera.direction_at(x as f64, y as f64),
         );
 
-        let mut color = Color::from_normal(ray.direction);
-        let objects = self.cast_ray(&ray);
+        // as a test, we take the normal color of the ray's direction for the skybox (just for now)
+        let (object, hit) = match self.cast_ray_once(&ray) {
+            Some(r) => r,
+            None => return Color::from_normal(ray.direction),
+        };
 
-        // TODO: this needs to be a lot more complex, but for now, we'll just take the first object if any
-        if !objects.is_empty() {
-            let (obj, hit) = &objects[0];
-            color = obj.material().color;
+        let mut color = object.material().color;
+
+        // Calculate light influences
+        let mut sum_vecs: Vector3 = self.ambient.into();
+        for light in self.lights.iter() {
+            let lcol: Vector3 = (*light.color()).into();
+            let shading = light.shading(&ray, &hit, self);
+
+            // color from diffuse/specular
+            let diffuse = lcol * shading.diffuse;
+            let specular = lcol * (shading.specular * light.specular_strength());
+
+            sum_vecs += (diffuse + specular) * shading.intensity;
         }
+
+        color = (Into::<Vector3>::into(color) * sum_vecs).into();
+
+        // todo: refraction
+
+        // todo: reflection
+
+        // todo: fog
 
         color
     }
 
     /// Render the image out as a list of Colors.
     pub fn render(&self) -> Vec<Color> {
-        let mut v = vec![];
-
-        // TEMPORARY: naive approach, does not use multiple cores
-        for y in 0..self.camera.vh {
-            for x in 0..self.camera.vw {
-                v.push(self.trace_pixel(x, y));
-            }
-        }
-
-        v
+        let (vw, vh) = (self.camera.vw, self.camera.vh);
+        (0..(vw * vh))
+            .into_par_iter()
+            .map(|i| self.trace_pixel(i % vw, i / vw))
+            .collect::<Vec<_>>()
     }
 }

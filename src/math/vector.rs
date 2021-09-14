@@ -1,4 +1,6 @@
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub};
+
+use crate::material::Color;
 
 /// A vector in 3D space.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
@@ -67,7 +69,7 @@ impl Vector3 {
 }
 
 impl Add for Vector3 {
-    type Output = Vector3;
+    type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
         Self {
@@ -78,8 +80,16 @@ impl Add for Vector3 {
     }
 }
 
+impl AddAssign for Vector3 {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+        self.z += rhs.z;
+    }
+}
+
 impl Sub for Vector3 {
-    type Output = Vector3;
+    type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
         Self {
@@ -91,7 +101,7 @@ impl Sub for Vector3 {
 }
 
 impl Mul for Vector3 {
-    type Output = Vector3;
+    type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
         Self {
@@ -103,7 +113,7 @@ impl Mul for Vector3 {
 }
 
 impl Mul<f64> for Vector3 {
-    type Output = Vector3;
+    type Output = Self;
 
     fn mul(self, rhs: f64) -> Self::Output {
         Self {
@@ -115,7 +125,7 @@ impl Mul<f64> for Vector3 {
 }
 
 impl Div for Vector3 {
-    type Output = Vector3;
+    type Output = Self;
 
     fn div(self, rhs: Self) -> Self::Output {
         Self {
@@ -127,13 +137,35 @@ impl Div for Vector3 {
 }
 
 impl Div<f64> for Vector3 {
-    type Output = Vector3;
+    type Output = Self;
 
     fn div(self, rhs: f64) -> Self::Output {
         Self {
             x: self.x / rhs,
             y: self.y / rhs,
             z: self.z / rhs,
+        }
+    }
+}
+
+impl Neg for Vector3 {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
+    }
+}
+
+impl From<Color> for Vector3 {
+    fn from(color: Color) -> Self {
+        Self {
+            x: color.r as f64 / 255.,
+            y: color.g as f64 / 255.,
+            z: color.b as f64 / 255.,
         }
     }
 }

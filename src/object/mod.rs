@@ -32,7 +32,7 @@ pub trait Intersect {
 }
 
 /// A trait that represents any type that is a scene object, and can thus be viewed in the final render.
-pub trait SceneObject: Intersect {
+pub trait SceneObject: Intersect + Send + Sync {
     /// Grab this scene object's material.
     fn material(&self) -> &Material;
 }
