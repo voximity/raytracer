@@ -1,4 +1,8 @@
-use crate::{material::Material, math::{Ray, Vector3}, scene::EPSILON};
+use crate::{
+    material::Material,
+    math::{Ray, Vector3},
+    scene::EPSILON,
+};
 
 use super::{Hit, Intersect, SceneObject};
 

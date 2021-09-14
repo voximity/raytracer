@@ -90,5 +90,8 @@ fn main() {
         .save_with_format("render.png", image::ImageFormat::Png)
         .unwrap();
 
-    println!("Operation complete in {}s", start_time.elapsed().as_secs() as f32 + start_time.elapsed().subsec_millis() as f32 / 1000.);
+    println!(
+        "Operation complete in {}s",
+        start_time.elapsed().as_secs() as f32 + start_time.elapsed().subsec_millis() as f32 / 1000.
+    );
 }

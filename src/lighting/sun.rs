@@ -1,10 +1,9 @@
-use std::cmp;
+
 
 use crate::{
-    material::{Color, Material},
+    material::Color,
     math::{Ray, Vector3},
     object::Hit,
-    remap,
     scene::{Scene, EPSILON},
 };
 

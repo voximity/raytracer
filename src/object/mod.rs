@@ -6,8 +6,8 @@ use crate::{
     math::{Ray, Vector3},
 };
 
-pub use sphere::*;
 pub use plane::*;
+pub use sphere::*;
 
 /// The result of a ray intersection.
 #[derive(Clone, Debug, PartialEq)]

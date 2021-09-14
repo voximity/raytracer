@@ -1,9 +1,9 @@
 mod sun;
 
 use crate::{
-    material::{Color, Material},
+    material::Color,
     math::Ray,
-    object::{Hit, SceneObject},
+    object::Hit,
     scene::Scene,
 };
 
