@@ -27,7 +27,7 @@ impl Default for Sun {
             specular_power: 32,
             specular_strength: 0.5,
             vector: Vector3::new(0., -1., 0.),
-            shadow_coefficient: 0.2,
+            shadow_coefficient: 0.4,
         }
     }
 }

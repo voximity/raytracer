@@ -1,3 +1,4 @@
+mod plane;
 mod sphere;
 
 use crate::{
@@ -6,6 +7,7 @@ use crate::{
 };
 
 pub use sphere::*;
+pub use plane::*;
 
 /// The result of a ray intersection.
 #[derive(Clone, Debug, PartialEq)]
