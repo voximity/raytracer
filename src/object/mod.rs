@@ -1,4 +1,11 @@
-use crate::math::{Ray, Vector3};
+mod sphere;
+
+use crate::{
+    material::Material,
+    math::{Ray, Vector3},
+};
+
+pub use sphere::*;
 
 /// The result of a ray intersection.
 #[derive(Clone, Debug, PartialEq)]
@@ -20,10 +27,12 @@ impl Hit {
 
 /// A trait that represents any type that can be intersected by a Ray.
 pub trait Intersect {
-    fn intersect(ray: &Ray) -> Option<Hit>;
+    /// Find the intersection, if any, between the ray provided and this shape.
+    fn intersect(&self, ray: &Ray) -> Option<Hit>;
 }
 
 /// A trait that represents any type that is a scene object, and can thus be viewed in the final render.
 pub trait SceneObject: Intersect {
-    
+    /// Grab this scene object's material.
+    fn material(&self) -> &Material;
 }
