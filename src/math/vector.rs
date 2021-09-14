@@ -14,6 +14,33 @@ impl Vector3 {
         Self { x, y, z }
     }
 
+    /// Instantiate a new Vector3 pointing up.
+    pub fn up() -> Self {
+        Self {
+            x: 0.,
+            y: 1.,
+            z: 0.,
+        }
+    }
+
+    /// Instantiate a new Vector3 pointing forward.
+    pub fn forward() -> Self {
+        Self {
+            x: 0.,
+            y: 0.,
+            z: -1.,
+        }
+    }
+
+    /// Instantiate a new Vector3 pointing right.
+    pub fn right() -> Self {
+        Self {
+            x: 1.,
+            y: 0.,
+            z: 0.,
+        }
+    }
+
     /// Find the dot product between two Vector3s.
     pub fn dot(self, other: Self) -> f64 {
         self.x * other.x + self.y * other.y + self.z * other.z

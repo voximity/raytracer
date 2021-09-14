@@ -29,6 +29,51 @@ impl Matrix {
         }
     }
 
+    /// Create a new matrix from a forward vector.
+    ///
+    /// **Note:** This vector is expected to be normalized.
+    pub fn from_forward(vec: Vector3) -> Self {
+        let forward = vec;
+        let right = Vector3::up().cross(vec);
+        let up = forward.cross(right);
+
+        Matrix {
+            x: 0.,
+            y: 0.,
+            z: 0.,
+            m00: right.x,
+            m01: right.y,
+            m02: right.z,
+            m10: up.x,
+            m11: up.y,
+            m12: up.z,
+            m20: -forward.x,
+            m21: -forward.y,
+            m22: -forward.z,
+        }
+    }
+
+    #[rustfmt::skip]
+    fn euler_matrices(x: f64, y: f64, z: f64) -> (Self, Self, Self) {
+        (
+            Matrix { x: 0., y: 0., z: 0., m00: 1., m01: 0., m02: 0., m10: 0., m11: x.cos(), m12: -x.sin(), m20: 0., m21: x.sin(), m22: x.cos() },
+            Matrix { x: 0., y: 0., z: 0., m00: y.cos(), m01: 0., m02: y.sin(), m10: 0., m11: 1., m12: 0., m20: -y.sin(), m21: 0., m22: y.cos() },
+            Matrix { x: 0., y: 0., z: 0., m00: z.cos(), m01: -z.sin(), m02: 0., m10: z.sin(), m11: z.cos(), m12: 0., m20: 0., m21: 0., m22: 1. },
+        )
+    }
+
+    /// Create a new matrix from Euler angles applied in XYZ order.
+    pub fn from_euler_xyz(x: f64, y: f64, z: f64) -> Self {
+        let (a, b, c) = Self::euler_matrices(x, y, z);
+        a * b * c
+    }
+
+    /// Create a new matrix from Euler angles applied in ZYX order.
+    pub fn from_euler_zyx(x: f64, y: f64, z: f64) -> Self {
+        let (a, b, c) = Self::euler_matrices(x, y, z);
+        c * b * a
+    }
+
     /// Get the components of this matrix.
     #[rustfmt::skip]
     pub fn components(self) -> [f64; 16] {
@@ -52,18 +97,23 @@ impl Matrix {
     }
 
     /// Get the right vector of this matrix.
-    pub fn right_vector(self) -> Vector3 {
+    pub fn right(self) -> Vector3 {
         Vector3::new(self.m00, self.m10, self.m20)
     }
 
     /// Get the up vector of this matrix.
-    pub fn up_vector(self) -> Vector3 {
+    pub fn up(self) -> Vector3 {
         Vector3::new(self.m01, self.m11, self.m21)
     }
 
     /// Get the forward vector of this matrix.
-    pub fn forward_vector(self) -> Vector3 {
+    pub fn forward(self) -> Vector3 {
         Vector3::new(-self.m02, -self.m12, -self.m22)
+    }
+
+    /// Get the position vector of this matrix.
+    pub fn pos(self) -> Vector3 {
+        Vector3::new(self.x, self.y, self.z)
     }
 }
 
