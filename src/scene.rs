@@ -1,5 +1,3 @@
-
-
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
@@ -18,6 +16,7 @@ pub struct Scene {
     pub lights: Vec<Box<dyn Light>>,
     pub camera: Camera,
     pub ambient: Color,
+    pub max_reflection_depth: u32,
 }
 
 impl Default for Scene {
@@ -27,6 +26,7 @@ impl Default for Scene {
             lights: Vec::new(),
             camera: Camera::default(),
             ambient: Color::new(40, 40, 40),
+            max_reflection_depth: 4,
         }
     }
 }
@@ -60,25 +60,8 @@ impl Scene {
         hit.into_iter().next()
     }
 
-    /// Trace out a pixel, where top-left of the image is (0, 0).
-    /// This function is run many times in parallel.
-    pub fn trace_pixel(&self, x: i32, y: i32) -> Color {
-        // Things to study:
-        // How can we optimize the object lookup process? There
-        // are many methods documented online of how to accelerate
-        // this. We can use a BVH, a chunked off octree (I have
-        // already written an implementation of this for another
-        // project so it wouldn't be too challenging to port it over
-        // and repurpose it), or a number of other acceleration
-        // structures. For now, we will just index through every
-        // unique scene object for every ray. This is slow, but for
-        // scenes of only a few objects, it's not really a problem.
-
-        let ray = Ray::new(
-            self.camera.origin,
-            self.camera.direction_at(x as f64, y as f64),
-        );
-
+    /// Trace out a ray, getting its color.
+    pub fn trace_ray(&self, ray: Ray, depth: u32) -> Color {
         // as a test, we take the normal color of the ray's direction for the skybox (just for now)
         let (object, hit) = match self.cast_ray_once(&ray) {
             Some(r) => r,
@@ -104,11 +87,44 @@ impl Scene {
 
         // todo: refraction
 
-        // todo: reflection
+        let reflectiveness = object.material().reflectiveness;
+        if reflectiveness > EPSILON && depth < self.max_reflection_depth {
+            // reflect off this object, and mix in the final color
+            // we do this just slightly off the surface of the
+            // hit object so as not to cause any weird overlap
+            let reflected = self.trace_ray(
+                ray.reflect(ray.along(hit.near) + hit.normal * EPSILON, hit.normal),
+                depth + 1,
+            );
+
+            color = color.lerp(reflected, reflectiveness);
+        }
 
         // todo: fog
 
         color
+    }
+
+    /// Trace out a pixel, where top-left of the image is (0, 0).
+    /// This function is run many times in parallel.
+    pub fn trace_pixel(&self, x: i32, y: i32) -> Color {
+        // Things to study:
+        // How can we optimize the object lookup process? There
+        // are many methods documented online of how to accelerate
+        // this. We can use a BVH, a chunked off octree (I have
+        // already written an implementation of this for another
+        // project so it wouldn't be too challenging to port it over
+        // and repurpose it), or a number of other acceleration
+        // structures. For now, we will just index through every
+        // unique scene object for every ray. This is slow, but for
+        // scenes of only a few objects, it's not really a problem.
+
+        let ray = Ray::new(
+            self.camera.origin,
+            self.camera.direction_at(x as f64, y as f64),
+        );
+
+        self.trace_ray(ray, 0)
     }
 
     /// Render the image out as a list of Colors.

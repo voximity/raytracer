@@ -98,17 +98,17 @@ impl Matrix {
 
     /// Get the right vector of this matrix.
     pub fn right(self) -> Vector3 {
-        Vector3::new(self.m00, self.m10, self.m20)
+        Vector3::new(self.m00, self.m01, self.m02)
     }
 
     /// Get the up vector of this matrix.
     pub fn up(self) -> Vector3 {
-        Vector3::new(self.m01, self.m11, self.m21)
+        Vector3::new(self.m10, self.m11, self.m12)
     }
 
     /// Get the forward vector of this matrix.
     pub fn forward(self) -> Vector3 {
-        Vector3::new(-self.m02, -self.m12, -self.m22)
+        Vector3::new(-self.m20, -self.m21, -self.m22)
     }
 
     /// Get the position vector of this matrix.

@@ -21,4 +21,10 @@ impl Ray {
         let ab = self.direction;
         self.along(ap.dot(ab) / ab.dot(ab))
     }
+
+    /// Reflect this ray off of a position and a normal.
+    pub fn reflect(&self, pos: Vector3, normal: Vector3) -> Ray {
+        let dir = self.direction - normal * (2. * self.direction.dot(normal));
+        Ray::new(pos, dir)
+    }
 }

@@ -1,11 +1,6 @@
 mod sun;
 
-use crate::{
-    material::Color,
-    math::Ray,
-    object::Hit,
-    scene::Scene,
-};
+use crate::{material::Color, math::Ray, object::Hit, scene::Scene};
 
 pub use sun::*;
 

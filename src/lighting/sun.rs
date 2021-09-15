@@ -1,5 +1,3 @@
-
-
 use crate::{
     material::Color,
     math::{Ray, Vector3},

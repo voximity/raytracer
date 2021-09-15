@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod camera;
 mod lighting;
 mod material;
@@ -5,7 +7,7 @@ mod math;
 mod object;
 mod scene;
 
-use std::{ops::Range, time::Instant};
+use std::{f64::consts::PI, ops::Range, time::Instant};
 
 use camera::Camera;
 use material::{Color, Material};
@@ -24,6 +26,8 @@ fn main() {
         camera: Camera {
             vw: 800,
             vh: 600,
+            origin: Vector3::new(0., 2., 0.),
+            pitch: -PI / 8.,
             ..Default::default()
         },
         ..Default::default()
@@ -41,6 +45,7 @@ fn main() {
         Vector3::new(0., 1., 0.),
         Material {
             color: Color::new(10, 80, 20),
+            reflectiveness: 0.4,
         },
     )));
 
@@ -50,6 +55,7 @@ fn main() {
         2.,
         Material {
             color: Color::new(180, 0, 0),
+            reflectiveness: 0.4,
         },
     )));
 
@@ -58,6 +64,7 @@ fn main() {
         2.,
         Material {
             color: Color::new(0, 180, 0),
+            reflectiveness: 0.4,
         },
     )));
 
@@ -66,6 +73,7 @@ fn main() {
         2.,
         Material {
             color: Color::new(0, 0, 180),
+            reflectiveness: 0.4,
         },
     )));
 
