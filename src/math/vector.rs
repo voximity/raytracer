@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub};
 
 use crate::material::Color;
 
@@ -130,6 +130,14 @@ impl Mul<f64> for Vector3 {
             y: self.y * rhs,
             z: self.z * rhs,
         }
+    }
+}
+
+impl MulAssign<f64> for Vector3 {
+    fn mul_assign(&mut self, rhs: f64) {
+        self.x *= rhs;
+        self.y *= rhs;
+        self.z *= rhs;
     }
 }
 

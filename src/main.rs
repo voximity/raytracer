@@ -7,7 +7,7 @@ mod math;
 mod object;
 mod scene;
 
-use std::{f64::consts::PI, ops::Range, time::Instant};
+use std::{ops::Range, time::Instant};
 
 use camera::Camera;
 use material::{Color, Material};
@@ -26,8 +26,8 @@ fn main() {
         camera: Camera {
             vw: 800,
             vh: 600,
-            origin: Vector3::new(0., 2.5, 0.),
-            pitch: -PI / 8.,
+            origin: Vector3::new(0., 0.8, 0.),
+            pitch: -0.25,
             ..Default::default()
         },
         ..Default::default()
@@ -45,37 +45,23 @@ fn main() {
         Vector3::new(0., 1., 0.),
         Material {
             color: Color::new(10, 80, 20),
-            reflectiveness: 0.4,
+            reflectiveness: 0.2,
         },
     )));
 
-    // add some spheres
-    scene.objects.push(Box::new(object::Aabb::new(
-        Vector3::new(-5., 0., -15.),
-        Vector3::new(2., 2., 2.),
+    // add a teapot, everybody needs a teapot!
+    let mut teapot = object::Mesh::from_obj(
+        "assets/teapot.obj".into(),
         Material {
             color: Color::new(180, 0, 0),
-            reflectiveness: 0.4,
+            reflectiveness: 0.,
         },
-    )));
+    );
+    teapot.scale(0.8);
+    teapot.shift(Vector3::new(0., -2., -8.));
+    teapot.recalculate();
 
-    scene.objects.push(Box::new(object::Aabb::new(
-        Vector3::new(0., 0., -15.),
-        Vector3::new(2., 2., 2.),
-        Material {
-            color: Color::new(0, 180, 0),
-            reflectiveness: 0.4,
-        },
-    )));
-
-    scene.objects.push(Box::new(object::Aabb::new(
-        Vector3::new(5., 0., -15.),
-        Vector3::new(2., 2., 2.),
-        Material {
-            color: Color::new(0, 0, 180),
-            reflectiveness: 0.4,
-        },
-    )));
+    scene.objects.push(Box::new(teapot));
 
     // render out to a list of colors
     println!("Rendering scene");

@@ -6,7 +6,7 @@ use crate::{
 use super::{Hit, Intersect, SceneObject};
 
 /// An axis-aligned box, short for axis-aligned bounding box.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Aabb {
     pub pos: Vector3,
     pub size: Vector3,

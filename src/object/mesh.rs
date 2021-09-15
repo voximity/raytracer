@@ -4,7 +4,7 @@ use crate::{
     scene::EPSILON,
 };
 
-use super::{Aabb, Hit, Intersect};
+use super::{Aabb, Hit, Intersect, SceneObject};
 
 #[derive(Clone, Debug)]
 pub struct Triangle {
@@ -30,6 +30,12 @@ impl Triangle {
             e2,
             normal: n,
         }
+    }
+
+    fn recalculate(&mut self) {
+        self.e1 = self.v1 - self.v0;
+        self.e2 = self.v2 - self.v0;
+        self.normal = self.e1.cross(self.e2).normalize();
     }
 
     fn intersect(&self, ray: &Ray) -> Option<f64> {
@@ -70,7 +76,74 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn new(triangles: Vec<Triangle>, material: Material) -> Self {
-        let vecs = triangles
+        Self {
+            triangles,
+            bounding_box: Default::default(),
+            material,
+        }
+    }
+
+    pub fn from_obj(file_name: String, material: Material) -> Self {
+        let (models, _) = tobj::load_obj(
+            file_name,
+            &tobj::LoadOptions {
+                triangulate: true,
+                ..Default::default()
+            },
+        )
+        .expect("failed to parse obj");
+
+        let model = models.into_iter().next().unwrap();
+        let mut iter = model.mesh.indices.into_iter().peekable();
+
+        let mut triangles = vec![];
+        while iter.peek().is_some() {
+            let v0i = iter.next().unwrap();
+            let v1i = iter.next().unwrap();
+            let v2i = iter.next().unwrap();
+
+            triangles.push(Triangle::new(
+                Vector3::new(
+                    model.mesh.positions[v0i as usize * 3] as f64,
+                    model.mesh.positions[v0i as usize * 3 + 1] as f64,
+                    model.mesh.positions[v0i as usize * 3 + 2] as f64,
+                ),
+                Vector3::new(
+                    model.mesh.positions[v1i as usize * 3] as f64,
+                    model.mesh.positions[v1i as usize * 3 + 1] as f64,
+                    model.mesh.positions[v1i as usize * 3 + 2] as f64,
+                ),
+                Vector3::new(
+                    model.mesh.positions[v2i as usize * 3] as f64,
+                    model.mesh.positions[v2i as usize * 3 + 1] as f64,
+                    model.mesh.positions[v2i as usize * 3 + 2] as f64,
+                ),
+            ));
+        }
+
+        Self::new(triangles, material)
+    }
+
+    pub fn shift(&mut self, delta: Vector3) {
+        for tri in self.triangles.iter_mut() {
+            tri.v0 += delta;
+            tri.v1 += delta;
+            tri.v2 += delta;
+        }
+    }
+
+    pub fn scale(&mut self, delta: f64) {
+        for tri in self.triangles.iter_mut() {
+            tri.v0 *= delta;
+            tri.v1 *= delta;
+            tri.v2 *= delta;
+            tri.recalculate();
+        }
+    }
+
+    pub fn recalculate(&mut self) {
+        let vecs = self
+            .triangles
             .iter()
             .map(|v| [&v.v0, &v.v1, &v.v2])
             .flatten()
@@ -90,13 +163,7 @@ impl Mesh {
         );
         let max = Vector3::new(max_x, max_y, max_z);
 
-        let bounding_box = Aabb::new(center, max - center, Material::default());
-
-        Self {
-            triangles,
-            bounding_box,
-            material,
-        }
+        self.bounding_box = Aabb::new(center, max - center, Material::default());
     }
 }
 
@@ -142,5 +209,11 @@ impl Intersect for Mesh {
                 intersected_tris[1].1,
             )),
         }
+    }
+}
+
+impl SceneObject for Mesh {
+    fn material(&self) -> &Material {
+        &self.material
     }
 }

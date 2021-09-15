@@ -9,7 +9,7 @@ use crate::{
 };
 
 /// A very small value, close to zero, to prevent weird overlapping.
-pub const EPSILON: f64 = 0.000001;
+pub const EPSILON: f64 = 0.0000000001;
 
 /// A scene, which contains a list of objects, lights, and a camera to render from.
 pub struct Scene {
