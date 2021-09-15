@@ -5,13 +5,31 @@ use crate::{camera::Camera, lighting::Light, material::Color, math::{Lerp, Ray, 
 /// A very small value, close to zero, to prevent weird overlapping.
 pub const EPSILON: f64 = 0.00000000001;
 
+/// Scene options. Defaults are provided.
+#[derive(Debug, Clone)]
+pub struct SceneOptions {
+    /// The maximum number of bounces a ray can reflect/refract/etc. from an initial ray.
+    pub max_ray_depth: u32,
+
+    /// The ambient color of the scene.
+    pub ambient: Color,
+}
+
+impl Default for SceneOptions {
+    fn default() -> Self {
+        Self {
+            max_ray_depth: 4,
+            ambient: Color::new(40, 40, 40),
+        }
+    }
+}
+
 /// A scene, which contains a list of objects, lights, and a camera to render from.
 pub struct Scene {
     pub objects: Vec<Box<dyn SceneObject>>,
     pub lights: Vec<Box<dyn Light>>,
     pub camera: Camera,
-    pub ambient: Color,
-    pub max_reflection_depth: u32,
+    pub options: SceneOptions,
 }
 
 impl Default for Scene {
@@ -20,8 +38,7 @@ impl Default for Scene {
             objects: Vec::new(),
             lights: Vec::new(),
             camera: Camera::default(),
-            ambient: Color::new(40, 40, 40),
-            max_reflection_depth: 4,
+            options: SceneOptions::default(),
         }
     }
 }
@@ -77,7 +94,7 @@ impl Scene {
         let mut color = object.material().color;
 
         // Calculate light influences
-        let mut sum_vecs: Vector3 = self.ambient.into();
+        let mut sum_vecs: Vector3 = self.options.ambient.into();
         for light in self.lights.iter() {
             let lcol: Vector3 = (*light.color()).into();
             let shading = light.shading(&ray, &hit, self);
@@ -94,7 +111,7 @@ impl Scene {
         // todo: refraction
 
         let reflectiveness = object.material().reflectiveness;
-        if reflectiveness > EPSILON && depth < self.max_reflection_depth {
+        if reflectiveness > EPSILON && depth < self.options.max_ray_depth {
             // reflect off this object, and mix in the final color
             // we do this just slightly off the surface of the
             // hit object so as not to cause any weird overlap
