@@ -14,3 +14,15 @@ Since the goal of this raytracer is to be fast, here are some things I want to r
   * More?
 * Better parallelism (currently made possible by Rayon, a data parallelism library)
 * Run on the GPU somehow?
+
+## Progress
+
+#### 9/14/2021
+
+Today, we decided that I would work on a raytracer in Rust. I began working on it. By the end of the day,
+it is capable of rendering spheres and planes, reflections, sun lights, and can shade with Blinn-Phong
+shading. I parallelized it with the Rust library Rayon.
+
+Below is a screenshot, 800x600, that renders in 0.022 seconds.
+
+![Progress screenshot from 9/14/2021](/images/readme/9_14_2021.png)

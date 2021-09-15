@@ -26,8 +26,8 @@ fn main() {
         camera: Camera {
             vw: 800,
             vh: 600,
-            origin: Vector3::new(0., 2., 0.),
-            pitch: -PI / 8.,
+            origin: Vector3::new(0., 1., 0.),
+            pitch: -PI / 16.,
             ..Default::default()
         },
         ..Default::default()
