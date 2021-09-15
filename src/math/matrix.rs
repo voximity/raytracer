@@ -2,6 +2,9 @@ use std::ops::Mul;
 
 use super::Vector3;
 
+/// A transformation matrix, which stores a position
+/// and rotation. Can be multiplied by other matrices
+/// to affect rotation and position.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Matrix {
     pub x: f64,

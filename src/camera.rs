@@ -3,12 +3,26 @@ use crate::math::{Matrix, Vector3};
 /// A Camera object. Represents a viewable area that a scene can be rendered to.
 #[derive(Clone, Debug)]
 pub struct Camera {
+    /// The viewport width.
     pub vw: i32,
+
+    /// The viewport height.
     pub vh: i32,
+
+    /// The origin of the camera.
     pub origin: Vector3,
+
+    /// The yaw of the camera's rotation.
     pub yaw: f64,
+
+    /// The pitch of the camera's rotation.
     pub pitch: f64,
+
+    /// The camera's vertical FOV in degrees. Set using
+    /// [`set_fov`](Self::set_fov)
     pub fov: f64,
+
+    /// A precomputed value used when determining ray direction from pixel. Do not set.
     pub chf: f64,
 }
 

@@ -4,6 +4,7 @@ use crate::{material::Color, math::Ray, object::Hit, scene::Scene};
 
 pub use sun::*;
 
+/// The result of a light's influence on a ray intersection.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct LightShading {
     pub diffuse: f64,
@@ -22,6 +23,8 @@ impl LightShading {
 }
 
 /// This trait represents any object that is a light.
+/// It provides details about the light, as well as the result
+/// of shading due to the light at a certain point.
 pub trait Light: Send + Sync {
     fn color(&self) -> &Color;
     fn intensity(&self) -> f64;

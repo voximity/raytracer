@@ -4,6 +4,7 @@ fn lerp(a: f64, b: f64, c: f64) -> f64 {
     a + (b - a) * c
 }
 
+/// A 24-bit color, RGB.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Color {
     pub r: u8,
@@ -47,6 +48,9 @@ impl From<Vector3> for Color {
     }
 }
 
+/// A material for a scene object. Over time, this struct
+/// will be populated with more physical rendering
+/// properties.
 #[derive(Clone, Debug)]
 pub struct Material {
     pub color: Color,

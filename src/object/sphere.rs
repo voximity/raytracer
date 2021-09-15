@@ -5,6 +5,7 @@ use crate::{
 
 use super::{Hit, Intersect, SceneObject};
 
+/// A sphere.
 #[derive(Debug, Clone)]
 pub struct Sphere {
     pub origin: Vector3,

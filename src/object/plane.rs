@@ -6,6 +6,7 @@ use crate::{
 
 use super::{Hit, Intersect, SceneObject};
 
+/// A plane.
 #[derive(Debug, Clone)]
 pub struct Plane {
     pub origin: Vector3,

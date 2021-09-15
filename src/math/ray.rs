@@ -1,5 +1,6 @@
 use super::Vector3;
 
+/// A ray, which has an `origin` and a `direction`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ray {
     pub origin: Vector3,

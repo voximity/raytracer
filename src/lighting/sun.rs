@@ -7,6 +7,9 @@ use crate::{
 
 use super::{Light, LightShading};
 
+/// A sun light, which has no position, just a vector direction that is
+/// true for all points in the world.
+#[derive(Debug, Clone)]
 pub struct Sun {
     pub color: Color,
     pub intensity: f64,
