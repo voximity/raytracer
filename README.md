@@ -21,8 +21,8 @@ Since the goal of this raytracer is to be fast, here are some things I want to r
 #### 9/14/2021
 
 Today, we decided that I would work on a raytracer in Rust. I began working on it. By the end of the day,
-it is capable of rendering spheres and planes, reflections, sun lights, and can shade with Blinn-Phong
-shading. I parallelized it with the Rust library Rayon.
+it is capable of rendering spheres, planes, meshes (arbitrary wavefront OBJ models), reflections, sun lights,
+and can shade with Blinn-Phong shading. I parallelized it with the Rust library Rayon.
 
 Below is a screenshot, 800x600, that renders in 0.022 seconds.
 

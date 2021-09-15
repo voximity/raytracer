@@ -24,8 +24,8 @@ fn main() {
 
     let mut scene = Scene {
         camera: Camera {
-            vw: 800,
-            vh: 600,
+            vw: 1920,
+            vh: 1080,
             origin: Vector3::new(0., 0.8, 0.),
             pitch: -0.25,
             ..Default::default()
@@ -45,7 +45,7 @@ fn main() {
         Vector3::new(0., 1., 0.),
         Material {
             color: Color::new(10, 80, 20),
-            reflectiveness: 0.2,
+            reflectiveness: 0.,
         },
     )));
 
