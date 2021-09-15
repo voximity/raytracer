@@ -20,9 +20,9 @@ impl Intersect for Aabb {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
         let ro = ray.origin - self.pos;
         let s = Vector3::new(
-            if ray.direction.x < 0. { 1. } else { -1. },
-            if ray.direction.y < 0. { 1. } else { -1. },
-            if ray.direction.z < 0. { 1. } else { -1. },
+            -ray.direction.x.signum(),
+            -ray.direction.y.signum(),
+            -ray.direction.z.signum(),
         );
 
         let t1 = ray.inverse() * (-ro + (s * self.size));

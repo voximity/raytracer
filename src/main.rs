@@ -50,18 +50,18 @@ fn main() {
     )));
 
     // add some spheres
-    scene.objects.push(Box::new(object::Sphere::new(
+    scene.objects.push(Box::new(object::Aabb::new(
         Vector3::new(-5., 0., -15.),
-        2.,
+        Vector3::new(2., 2., 2.),
         Material {
             color: Color::new(180, 0, 0),
             reflectiveness: 0.4,
         },
     )));
 
-    scene.objects.push(Box::new(object::Sphere::new(
+    scene.objects.push(Box::new(object::Aabb::new(
         Vector3::new(0., 0., -15.),
-        2.,
+        Vector3::new(2., 2., 2.),
         Material {
             color: Color::new(0, 180, 0),
             reflectiveness: 0.4,
