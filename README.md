@@ -14,6 +14,7 @@ Since the goal of this raytracer is to be fast, here are some things I want to r
   * More?
 * Better parallelism (currently made possible by Rayon, a data parallelism library)
 * Run on the GPU somehow?
+  * If not, look into using SIMD for accelerated ray intersection math
 
 ## Progress
 

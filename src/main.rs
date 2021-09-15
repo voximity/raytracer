@@ -26,8 +26,8 @@ fn main() {
         camera: Camera {
             vw: 800,
             vh: 600,
-            origin: Vector3::new(0., 1., 0.),
-            pitch: -PI / 16.,
+            origin: Vector3::new(0., 2.5, 0.),
+            pitch: -PI / 8.,
             ..Default::default()
         },
         ..Default::default()
@@ -68,9 +68,9 @@ fn main() {
         },
     )));
 
-    scene.objects.push(Box::new(object::Sphere::new(
+    scene.objects.push(Box::new(object::Aabb::new(
         Vector3::new(5., 0., -15.),
-        2.,
+        Vector3::new(2., 2., 2.),
         Material {
             color: Color::new(0, 0, 180),
             reflectiveness: 0.4,

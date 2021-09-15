@@ -1,3 +1,4 @@
+mod aabb;
 mod plane;
 mod sphere;
 
@@ -6,6 +7,7 @@ use crate::{
     math::{Ray, Vector3},
 };
 
+pub use aabb::*;
 pub use plane::*;
 pub use sphere::*;
 

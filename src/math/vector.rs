@@ -66,6 +66,15 @@ impl Vector3 {
     pub fn normalize(self) -> Self {
         self / self.magnitude()
     }
+
+    /// Inverse this vector.
+    pub fn inverse(self) -> Self {
+        Self {
+            x: 1. / self.x,
+            y: 1. / self.y,
+            z: 1. / self.z,
+        }
+    }
 }
 
 impl Add for Vector3 {

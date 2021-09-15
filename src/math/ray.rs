@@ -5,12 +5,13 @@ use super::Vector3;
 pub struct Ray {
     pub origin: Vector3,
     pub direction: Vector3,
+    m: Vector3,
 }
 
 impl Ray {
     /// Instantiate a new Ray. The direction is expected to be already normalized.
     pub fn new(origin: Vector3, direction: Vector3) -> Self {
-        Self { origin, direction }
+        Self { origin, direction, m: direction.inverse() }
     }
 
     pub fn along(&self, t: f64) -> Vector3 {
@@ -21,6 +22,10 @@ impl Ray {
         let ap = vec - self.origin;
         let ab = self.direction;
         self.along(ap.dot(ab) / ab.dot(ab))
+    }
+
+    pub fn inverse(&self) -> Vector3 {
+        self.m
     }
 
     /// Reflect this ray off of a position and a normal.
