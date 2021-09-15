@@ -11,7 +11,11 @@ pub struct Ray {
 impl Ray {
     /// Instantiate a new Ray. The direction is expected to be already normalized.
     pub fn new(origin: Vector3, direction: Vector3) -> Self {
-        Self { origin, direction, m: direction.inverse() }
+        Self {
+            origin,
+            direction,
+            m: direction.inverse(),
+        }
     }
 
     pub fn along(&self, t: f64) -> Vector3 {

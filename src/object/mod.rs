@@ -1,4 +1,5 @@
 mod aabb;
+mod mesh;
 mod plane;
 mod sphere;
 
@@ -8,6 +9,7 @@ use crate::{
 };
 
 pub use aabb::*;
+pub use mesh::*;
 pub use plane::*;
 pub use sphere::*;
 

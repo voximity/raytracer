@@ -1,4 +1,7 @@
-use crate::{material::Material, math::{Ray, Vector3}};
+use crate::{
+    material::Material,
+    math::{Ray, Vector3},
+};
 
 use super::{Hit, Intersect, SceneObject};
 
@@ -12,7 +15,11 @@ pub struct Aabb {
 
 impl Aabb {
     pub fn new(pos: Vector3, size: Vector3, material: Material) -> Self {
-        Self { pos, size, material }
+        Self {
+            pos,
+            size,
+            material,
+        }
     }
 }
 
