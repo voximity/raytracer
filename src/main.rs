@@ -24,10 +24,10 @@ fn main() {
 
     let mut scene = Scene {
         camera: Camera {
-            vw: 1920,
-            vh: 1080,
-            origin: Vector3::new(0., 0.8, 0.),
-            pitch: -0.25,
+            vw: 2560,
+            vh: 1440,
+            origin: Vector3::new(0., 3.5, 0.),
+            pitch: -0.45,
             ..Default::default()
         },
         ..Default::default()
@@ -54,7 +54,7 @@ fn main() {
         "assets/teapot.obj".into(),
         Material {
             color: Color::new(180, 0, 0),
-            reflectiveness: 0.,
+            reflectiveness: 0.3,
         },
     );
     teapot.scale(0.8);
@@ -62,6 +62,34 @@ fn main() {
     teapot.recalculate();
 
     scene.objects.push(Box::new(teapot));
+
+    // and a few adjacent spheres
+    scene.objects.push(Box::new(object::Sphere::new(
+        Vector3::new(4., 0., -12.),
+        2.,
+        Material {
+            color: Color::new(0, 180, 0),
+            reflectiveness: 0.3,
+        }
+    )));
+
+    scene.objects.push(Box::new(object::Sphere::new(
+        Vector3::new(-4., 0., -12.),
+        2.,
+        Material {
+            color: Color::new(0, 0, 180),
+            reflectiveness: 0.3,
+        }
+    )));
+
+    scene.objects.push(Box::new(object::Aabb::new(
+        Vector3::new(0., 1., -16.),
+        Vector3::new(2., 2., 2.),
+        Material {
+            color: Color::new(180, 0, 180),
+            reflectiveness: 0.3,
+        }
+    )));
 
     // render out to a list of colors
     println!("Rendering scene");

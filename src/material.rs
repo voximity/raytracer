@@ -1,8 +1,4 @@
-use crate::math::Vector3;
-
-fn lerp(a: f64, b: f64, c: f64) -> f64 {
-    a + (b - a) * c
-}
+use crate::math::{Lerp, Vector3, lerp};
 
 /// A 24-bit color, RGB.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -31,20 +27,21 @@ impl Color {
     pub fn from_normal(n: Vector3) -> Self {
         Self::newf(n.x / 2. + 0.5, n.y / 2. + 0.5, n.z / 2. + 0.5)
     }
-
-    /// Linearly interpolate between two colors.
-    pub fn lerp(self, other: Color, t: f64) -> Self {
-        Color {
-            r: lerp(self.r as f64, other.r as f64, t).clamp(0., 255.) as u8,
-            g: lerp(self.g as f64, other.g as f64, t).clamp(0., 255.) as u8,
-            b: lerp(self.b as f64, other.b as f64, t).clamp(0., 255.) as u8,
-        }
-    }
 }
 
 impl From<Vector3> for Color {
     fn from(v: Vector3) -> Self {
         Self::newf(v.x, v.y, v.z)
+    }
+}
+
+impl Lerp for Color {
+    fn lerp(self, other: Self, t: f64) -> Self {
+        Color {
+            r: lerp(self.r as f64, other.r as f64, t).clamp(0., 255.) as u8,
+            g: lerp(self.g as f64, other.g as f64, t).clamp(0., 255.) as u8,
+            b: lerp(self.b as f64, other.b as f64, t).clamp(0., 255.) as u8,
+        }
     }
 }
 

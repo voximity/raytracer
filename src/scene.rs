@@ -1,15 +1,9 @@
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::{
-    camera::Camera,
-    lighting::Light,
-    material::Color,
-    math::{Ray, Vector3},
-    object::{Hit, SceneObject},
-};
+use crate::{camera::Camera, lighting::Light, material::Color, math::{Lerp, Ray, Vector3}, object::{Hit, SceneObject}};
 
 /// A very small value, close to zero, to prevent weird overlapping.
-pub const EPSILON: f64 = 0.0000000001;
+pub const EPSILON: f64 = 0.00000000001;
 
 /// A scene, which contains a list of objects, lights, and a camera to render from.
 pub struct Scene {

@@ -2,6 +2,8 @@ use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub};
 
 use crate::material::Color;
 
+use super::{Lerp, lerp};
+
 /// A vector in 3D space.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct Vector3 {
@@ -183,6 +185,16 @@ impl From<Color> for Vector3 {
             x: color.r as f64 / 255.,
             y: color.g as f64 / 255.,
             z: color.b as f64 / 255.,
+        }
+    }
+}
+
+impl Lerp for Vector3 {
+    fn lerp(self, other: Self, t: f64) -> Self {
+        Self {
+            x: lerp(self.x, other.x, t),
+            y: lerp(self.y, other.y, t),
+            z: lerp(self.z, other.z, t),
         }
     }
 }
