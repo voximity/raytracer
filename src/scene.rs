@@ -91,12 +91,12 @@ impl Scene {
             None => return Color::from_normal(ray.direction),
         };
 
-        let mut color = object.material().color;
+        let mut color: Vector3 = object.material().color.into();
 
         // Calculate light influences
         let mut sum_vecs: Vector3 = self.options.ambient.into();
         for light in self.lights.iter() {
-            let lcol: Vector3 = (*light.color()).into();
+            let lcol: Vector3 = light.color().to_owned().into();
             let shading = light.shading(&ray, &hit, self);
 
             // color from diffuse/specular
@@ -106,7 +106,7 @@ impl Scene {
             sum_vecs += (diffuse + specular) * shading.intensity;
         }
 
-        color = (Into::<Vector3>::into(color) * sum_vecs).into();
+        color = color * sum_vecs;
 
         // todo: refraction
 
@@ -122,12 +122,12 @@ impl Scene {
                 depth + 1,
             );
 
-            color = color.lerp(reflected, reflectiveness);
+            color = color.lerp(reflected.into(), reflectiveness);
         }
 
         // todo: fog
 
-        color
+        color.into()
     }
 
     /// Trace out a pixel, where top-left of the image is (0, 0).

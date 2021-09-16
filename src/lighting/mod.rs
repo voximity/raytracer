@@ -1,8 +1,14 @@
+mod point;
 mod sun;
 
 use crate::{material::Color, math::Ray, object::Hit, scene::Scene};
 
+pub use point::*;
 pub use sun::*;
+
+/// Approximately how many raytracer units equates to a meter.
+/// Used for lighting.
+pub static METER: f64 = 1.;
 
 /// The result of a light's influence on a ray intersection.
 #[derive(Clone, Debug, Default, PartialEq)]

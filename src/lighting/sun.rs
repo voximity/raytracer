@@ -16,6 +16,7 @@ pub struct Sun {
     pub specular_power: i32,
     pub specular_strength: f64,
     pub vector: Vector3,
+    pub shadows: bool,
     pub shadow_coefficient: f64,
 }
 
@@ -27,7 +28,8 @@ impl Default for Sun {
             specular_power: 32,
             specular_strength: 0.5,
             vector: Vector3::new(0., -1., 0.),
-            shadow_coefficient: 0.4,
+            shadows: true,
+            shadow_coefficient: 0.5,
         }
     }
 }
@@ -64,12 +66,14 @@ impl Light for Sun {
             .powi(self.specular_power);
 
         // apply shadowing
-        let hit_pos = ray.along(hit.near);
-        let shadow_ray = Ray::new(hit_pos + hit.normal * EPSILON, lvec);
-        if let Some(_shadow_hit) = scene.cast_ray_once(&shadow_ray) {
-            // TODO: deal with transparency
-            diffuse *= self.shadow_coefficient;
-            specular *= self.shadow_coefficient;
+        if self.shadows {
+            let hit_pos = ray.along(hit.near);
+            let shadow_ray = Ray::new(hit_pos + hit.normal * EPSILON, lvec);
+            if let Some(_shadow_hit) = scene.cast_ray_once(&shadow_ray) {
+                // TODO: deal with transparency
+                diffuse *= self.shadow_coefficient;
+                specular *= self.shadow_coefficient;
+            }
         }
 
         LightShading::new(diffuse, specular, self.intensity)

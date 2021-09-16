@@ -27,3 +27,11 @@ and can shade with Blinn-Phong shading. I parallelized it with the Rust library 
 Below is a screenshot, 800x600, that renders in 0.022 seconds.
 
 ![Progress screenshot from 9/14/2021](/images/readme/9_14_2021.png)
+
+#### 9/15/2021
+
+Development was slower today because I have already implemented most features I would like to demo before I
+go further. I worked on optimization a bit, made my Rust code more idiomatic, and added point lights.
+Here is a screenshot, 1920x1080, that rendered in 0.102s.
+
+![Progress screenshot from 9/15/2021](/images/readme/9_15_2021.png)

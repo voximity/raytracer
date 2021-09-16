@@ -25,9 +25,9 @@ fn main() {
 
     let mut scene = Scene {
         camera: Camera {
-            vw: 2560,
-            vh: 1440,
-            origin: Vector3::new(0., 3.5, 0.),
+            vw: 1920,
+            vh: 1080,
+            origin: Vector3::new(0., 5., 0.),
             pitch: -0.45,
             ..Default::default()
         },
@@ -40,12 +40,25 @@ fn main() {
         ..Default::default()
     }));
 
+    // maybe a light or two
+    scene.lights.push(Box::new(lighting::Point {
+        position: Vector3::new(-2., 0., -8.),
+        color: Color::new(0, 0, 255),
+        ..Default::default()
+    }));
+
+    scene.lights.push(Box::new(lighting::Point {
+        position: Vector3::new(2., 0., -8.),
+        color: Color::new(255, 0, 0),
+        ..Default::default()
+    }));
+
     // add a plane
     scene.objects.push(Box::new(object::Plane::new(
         Vector3::new(0., -2., 0.),
         Vector3::new(0., 1., 0.),
         Material {
-            color: Color::new(10, 80, 20),
+            color: Color::new(40, 90, 50),
             reflectiveness: 0.,
         },
     )));
@@ -66,20 +79,20 @@ fn main() {
 
     // and a few adjacent spheres
     scene.objects.push(Box::new(object::Sphere::new(
-        Vector3::new(4., 0., -12.),
+        Vector3::new(-4., 0., -12.),
         2.,
         Material {
-            color: Color::new(0, 180, 0),
-            reflectiveness: 0.3,
+            color: Color::new(40, 180, 60),
+            reflectiveness: 0.,
         }
     )));
 
     scene.objects.push(Box::new(object::Sphere::new(
-        Vector3::new(-4., 0., -12.),
+        Vector3::new(4., 0., -12.),
         2.,
         Material {
-            color: Color::new(0, 0, 180),
-            reflectiveness: 0.3,
+            color: Color::new(80, 60, 180),
+            reflectiveness: 0.,
         }
     )));
 
@@ -88,7 +101,7 @@ fn main() {
         Vector3::new(2., 2., 2.),
         Material {
             color: Color::new(180, 0, 180),
-            reflectiveness: 0.3,
+            reflectiveness: 0.,
         }
     )));
 
