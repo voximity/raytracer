@@ -6,6 +6,9 @@ use crate::{
 
 use super::{Hit, Intersect, SceneObject};
 
+/// TEMPORARY: how often to wrap the UVs for a plane
+pub const TEX_WRAP: f32 = 1.;
+
 /// A plane.
 #[derive(Debug, Clone)]
 pub struct Plane {
@@ -30,7 +33,16 @@ impl Intersect for Plane {
         if denom.abs() > EPSILON {
             let t = (self.origin - ray.origin).dot(self.normal) / denom;
             if t > 0. {
-                Some(Hit::new(self.normal * -denom.signum(), t, t))
+                let p = ray.along(t);
+                // TEMPORARY: use x and z coords to determine uvs
+                // in the future this should take into account the
+                // plane's normal
+                Some(Hit::new(
+                    self.normal * -denom.signum(),
+                    (t, p),
+                    (t, p),
+                    (p.x as f32 / TEX_WRAP % 1., p.z as f32 / TEX_WRAP % 1.),
+                ))
             } else {
                 None
             }

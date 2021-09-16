@@ -1,4 +1,4 @@
-use crate::math::{Lerp, Vector3, lerp};
+use crate::math::{lerp, Lerp, Vector3};
 
 /// A 24-bit color, RGB.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]

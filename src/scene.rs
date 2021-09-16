@@ -1,6 +1,12 @@
 use rayon::prelude::*;
 
-use crate::{camera::Camera, lighting::Light, material::Color, math::{Lerp, Ray, Vector3}, object::{Hit, SceneObject}};
+use crate::{
+    camera::Camera,
+    lighting::Light,
+    material::Color,
+    math::{Lerp, Ray, Vector3},
+    object::{Hit, SceneObject},
+};
 
 /// A very small value, close to zero, to prevent weird overlapping.
 pub const EPSILON: f64 = 0.00000000001;

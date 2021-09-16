@@ -1,4 +1,9 @@
-use crate::{material::Color, math::{Ray, Vector3}, object::Hit, scene::{EPSILON, Scene}};
+use crate::{
+    material::Color,
+    math::{Ray, Vector3},
+    object::Hit,
+    scene::{Scene, EPSILON},
+};
 
 use super::{Light, LightShading, METER};
 

@@ -49,7 +49,12 @@ impl Intersect for Aabb {
             Vector3::new(0., 0., s.z)
         };
 
-        Some(Hit::new(normal, tn, tf))
+        let pn = ray.along(tn);
+        let pf = ray.along(tf);
+
+        
+
+        Some(Hit::new(normal, (tn, pn), (tf, pf)))
     }
 }
 

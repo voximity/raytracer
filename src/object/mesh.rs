@@ -6,26 +6,75 @@ use crate::{
 
 use super::{Aabb, Hit, Intersect, SceneObject};
 
+/// A texture coordinate, which is really just an optional
+/// reference inside the mesh's texture coordinate array.
+type TexCoord<'a> = &'a (f32, f32);
+
 #[derive(Clone, Debug)]
-pub struct Triangle {
+pub struct Triangle<'a> {
+    /// The first vertex of the triangle.
     v0: Vector3,
+
+    /// The second vertex of the triangle.
     v1: Vector3,
+
+    /// The third vertex of the triangle.
     v2: Vector3,
+
+    /// The texcoords of each vertex.
+    texcoords: Option<(TexCoord<'a>, TexCoord<'a>, TexCoord<'a>)>,
+
+    /// The precomputed edge 0.
+    e0: Vector3,
+
+    /// The precomputed edge 1.
     e1: Vector3,
+
+    /// The precomputed edge 2.
     e2: Vector3,
+
+    /// The precomputed normal.
     normal: Vector3,
 }
 
-impl Triangle {
-    pub fn new(v0: Vector3, v1: Vector3, v2: Vector3) -> Self {
-        let e1 = v1 - v0;
-        let e2 = v2 - v0;
-        let n = e1.cross(e2).normalize();
+#[derive(Debug, Clone)]
+struct TriIntersect {
+    p: Vector3,
+    t: f64,
+    u: f64,
+    v: f64,
+}
+
+impl TriIntersect {
+    fn u(&self) -> f64 {
+        self.u
+    }
+
+    fn v(&self) -> f64 {
+        self.v
+    }
+
+    fn w(&self) -> f64 {
+        1. - self.u - self.v
+    }
+}
+
+impl<'a> Triangle<'a> {
+    pub fn new(
+        (v0, v1, v2): (Vector3, Vector3, Vector3),
+        texcoords: Option<(TexCoord<'a>, TexCoord<'a>, TexCoord<'a>)>,
+    ) -> Self {
+        let e0 = v1 - v0;
+        let e1 = v2 - v1;
+        let e2 = v0 - v2;
+        let n = e0.cross(-e2).normalize();
 
         Self {
             v0,
             v1,
             v2,
+            texcoords,
+            e0,
             e1,
             e2,
             normal: n,
@@ -38,48 +87,85 @@ impl Triangle {
         self.normal = self.e1.cross(self.e2).normalize();
     }
 
-    fn intersect(&self, ray: &Ray) -> Option<f64> {
-        let h = ray.direction.cross(self.e2);
-        let a = self.e1.dot(h);
-        if a > -EPSILON && a < EPSILON {
+    fn intersect(&self, ray: &Ray) -> Option<TriIntersect> {
+        let denom = self.normal.dot(self.normal);
+
+        // find P
+        let ndrd = self.normal.dot(ray.direction);
+        if ndrd.abs() < EPSILON {
             return None;
         }
 
-        let f = 1. / a;
-        let s = ray.origin - self.v0;
-        let u = f * s.dot(h);
-        if !(0. ..= 1.).contains(&u) {
+        // compute d parameter
+        let d = self.normal.dot(self.v0);
+
+        // compute t
+        let t = (self.normal.dot(ray.origin) + d) / ndrd;
+        if t < 0. {
             return None;
         }
 
-        let q = s.cross(self.e1);
-        let v = f * ray.direction.dot(q);
-        if v < 0. || u + v > 1. {
+        // compute the intersection
+        let p = ray.origin + ray.direction * t;
+        let mut c;
+
+        // edge 0
+        let vp0 = p - self.v0;
+        c = self.e0.cross(vp0);
+        if self.normal.dot(c) < 0. {
             return None;
         }
 
-        let t = f * self.e2.dot(q);
-        if t > EPSILON {
-            Some(t)
-        } else {
-            None
+        // edge 1
+        let vp1 = p - self.v1;
+        let c = self.e1.cross(vp1);
+        let mut u = self.normal.dot(c);
+        if u < 0. {
+            return None;
+        }
+
+        // edge 2
+        let vp2 = p - self.v2;
+        c = self.e2.cross(vp2);
+        let mut v = self.normal.dot(c);
+        if v < 0. {
+            return None;
+        }
+
+        u /= denom;
+        v /= denom;
+
+        Some(TriIntersect { p, t, u, v })
+    }
+
+    fn uvs(&self, i: &TriIntersect) -> Option<(f32, f32)> {
+        match self.texcoords {
+            None => None,
+            Some((a, b, c)) => {
+                let iw = i.w();
+                let u = a.0 * i.u as f32 + b.0 * i.v as f32 + c.0 * iw as f32;
+                let v = a.1 * i.u as f32 + b.1 * i.v as f32 + c.1 * iw as f32;
+                Some((u, v))
+            }
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Mesh {
-    pub triangles: Vec<Triangle>,
+pub struct Mesh<'a> {
+    pub triangles: Vec<Triangle<'a>>,
     pub bounding_box: Aabb,
     pub material: Material,
+    pub texcoords: Vec<(f32, f32)>,
 }
 
-impl Mesh {
-    pub fn new(triangles: Vec<Triangle>, material: Material) -> Self {
+impl<'a> Mesh<'a> {
+    pub fn new(triangles: Vec<Triangle<'a>>, material: Material) -> Self {
         Self {
             triangles,
             bounding_box: Default::default(),
             material,
+            texcoords: Vec::new(),
         }
     }
 
@@ -94,6 +180,17 @@ impl Mesh {
         .expect("failed to parse obj");
 
         let model = models.into_iter().next().unwrap();
+        let texcoords_iter = model.mesh.texcoords.into_iter().peekable();
+        let mut texcoords = vec![];
+
+        while texcoords_iter.peek().is_some() {
+            let (x, y) = (
+                texcoords_iter.next().unwrap(),
+                texcoords_iter.next().unwrap(),
+            );
+            texcoords.push((x, y));
+        }
+
         let mut iter = model.mesh.indices.into_iter().peekable();
 
         let mut triangles = vec![];
@@ -103,25 +200,41 @@ impl Mesh {
             let v2i = iter.next().unwrap();
 
             triangles.push(Triangle::new(
-                Vector3::new(
-                    model.mesh.positions[v0i as usize * 3] as f64,
-                    model.mesh.positions[v0i as usize * 3 + 1] as f64,
-                    model.mesh.positions[v0i as usize * 3 + 2] as f64,
+                (
+                    Vector3::new(
+                        model.mesh.positions[v0i as usize * 3] as f64,
+                        model.mesh.positions[v0i as usize * 3 + 1] as f64,
+                        model.mesh.positions[v0i as usize * 3 + 2] as f64,
+                    ),
+                    Vector3::new(
+                        model.mesh.positions[v1i as usize * 3] as f64,
+                        model.mesh.positions[v1i as usize * 3 + 1] as f64,
+                        model.mesh.positions[v1i as usize * 3 + 2] as f64,
+                    ),
+                    Vector3::new(
+                        model.mesh.positions[v2i as usize * 3] as f64,
+                        model.mesh.positions[v2i as usize * 3 + 1] as f64,
+                        model.mesh.positions[v2i as usize * 3 + 2] as f64,
+                    ),
                 ),
-                Vector3::new(
-                    model.mesh.positions[v1i as usize * 3] as f64,
-                    model.mesh.positions[v1i as usize * 3 + 1] as f64,
-                    model.mesh.positions[v1i as usize * 3 + 2] as f64,
-                ),
-                Vector3::new(
-                    model.mesh.positions[v2i as usize * 3] as f64,
-                    model.mesh.positions[v2i as usize * 3 + 1] as f64,
-                    model.mesh.positions[v2i as usize * 3 + 2] as f64,
-                ),
+                if texcoords.is_empty() {
+                    None
+                } else {
+                    Some((
+                        &texcoords[model.mesh.texcoord_indices[v0i as usize] as usize],
+                        &texcoords[model.mesh.texcoord_indices[v1i as usize] as usize],
+                        &texcoords[model.mesh.texcoord_indices[v2i as usize] as usize],
+                    ))
+                },
             ));
         }
 
-        Self::new(triangles, material)
+        Self {
+            triangles,
+            material,
+            bounding_box: Aabb::default(),
+            texcoords,
+        }
     }
 
     pub fn shift(&mut self, delta: Vector3) {
@@ -167,7 +280,7 @@ impl Mesh {
     }
 }
 
-impl Intersect for Mesh {
+impl<'a> Intersect for Mesh<'a> {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
         // first, test if we strike the bounding box
         // if we don't, we can simply return
@@ -185,8 +298,9 @@ impl Intersect for Mesh {
             .collect::<Vec<_>>();
 
         // and sort them by nearness
-        intersected_tris
-            .sort_by(|(_, ta), (_, tb)| ta.partial_cmp(tb).unwrap_or(std::cmp::Ordering::Equal));
+        intersected_tris.sort_by(|(_, ta), (_, tb)| {
+            ta.t.partial_cmp(&tb.t).unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // return based on how many triangles we have
         match intersected_tris.len() {
@@ -196,21 +310,29 @@ impl Intersect for Mesh {
             // one hit: return the only hit, where t_far is also t_near
             1 => Some(Hit::new(
                 intersected_tris[0].0.normal,
-                intersected_tris[0].1,
-                intersected_tris[0].1,
+                (intersected_tris[0].1.t, intersected_tris[0].1.p),
+                (intersected_tris[0].1.t, intersected_tris[0].1.p),
+                intersected_tris[0]
+                    .0
+                    .uvs(&intersected_tris[0].1)
+                    .unwrap_or_default(),
             )),
 
             // two hits: return the first hit, but t_far is the t_near of the second hit (assuming we leave the mesh at this point)
             _ => Some(Hit::new(
                 intersected_tris[0].0.normal,
-                intersected_tris[0].1,
-                intersected_tris[1].1,
+                (intersected_tris[0].1.t, intersected_tris[0].1.p),
+                (intersected_tris[1].1.t, intersected_tris[1].1.p),
+                intersected_tris[0]
+                    .0
+                    .uvs(&intersected_tris[0].1)
+                    .unwrap_or_default(),
             )),
         }
     }
 }
 
-impl SceneObject for Mesh {
+impl<'a> SceneObject for Mesh<'a> {
     fn material(&self) -> &Material {
         &self.material
     }

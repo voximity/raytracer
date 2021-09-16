@@ -84,7 +84,7 @@ fn main() {
         Material {
             color: Color::new(40, 180, 60),
             reflectiveness: 0.,
-        }
+        },
     )));
 
     scene.objects.push(Box::new(object::Sphere::new(
@@ -93,7 +93,7 @@ fn main() {
         Material {
             color: Color::new(80, 60, 180),
             reflectiveness: 0.,
-        }
+        },
     )));
 
     scene.objects.push(Box::new(object::Aabb::new(
@@ -102,7 +102,7 @@ fn main() {
         Material {
             color: Color::new(180, 0, 180),
             reflectiveness: 0.,
-        }
+        },
     )));
 
     // render out to a list of colors

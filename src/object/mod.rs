@@ -18,12 +18,27 @@ pub use sphere::*;
 pub struct Hit {
     pub normal: Vector3,
     pub near: f64,
+    pub vnear: Vector3,
     pub far: f64,
+    pub vfar: Vector3,
+    pub uv: (f32, f32),
 }
 
 impl Hit {
-    pub fn new(normal: Vector3, near: f64, far: f64) -> Self {
-        Self { normal, near, far }
+    pub fn new(
+        normal: Vector3,
+        (near, vnear): (f64, Vector3),
+        (far, vfar): (f64, Vector3),
+        uv: (f32, f32),
+    ) -> Self {
+        Self {
+            normal,
+            near,
+            vnear,
+            far,
+            vfar,
+            uv,
+        }
     }
 
     pub fn pos(&self, ray: &Ray) -> Vector3 {

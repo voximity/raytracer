@@ -2,7 +2,7 @@ use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub};
 
 use crate::material::Color;
 
-use super::{Lerp, lerp};
+use super::{lerp, Lerp};
 
 /// A vector in 3D space.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
