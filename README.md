@@ -50,3 +50,19 @@ go further. I worked on optimization a bit, made my Rust code more idiomatic, an
 Here is a screenshot, 1920x1080, that rendered in 0.102s.
 
 ![Progress screenshot from 9/15/2021](/images/readme/9_15_2021.png)
+
+#### 9/16/2021
+
+Along with a tiny bit of work last night, I added a feature my old raytracer did not have: textures. I went
+through each primitive I'd implemented so far and added a way for a ray hit to also return the UV coordinates
+of where to pull from its texture. For cubes, it's quite simple: each face just renders the image back out as
+it was. For meshes, however, it's a lot more complicated. Every triangle vertice holds an index that refers
+back to the `texcoords` list of UVs in the mesh itself. When a ray strikes a triangle, the barycentric UVs
+are calculated, and later are converted to be in the space of the image. This took an immense amount of trial
+and error. I had to try different permutations of UVW from barycentric coordinates (turns out the solution
+was WUV), and mess with a bunch of other random trial-and-error stuff like not inverting `v` to be in the
+space of the image (i.e. `v` should have been `1. - v` when moving to image space).
+
+Here is an image of a fedora mesh with a texture that I ripped from the game Roblox for testing's sake.
+
+![Progress screenshot from 9/16/2021](/images/readme/9_16_2021.png)
