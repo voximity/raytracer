@@ -67,7 +67,7 @@ fn main() {
 
         let light = lighting::Point {
             color: Color::hsv(n as f32 / 8. * 360., 255, 255),
-            intensity: 8.,
+            intensity: 6.,
             position: Vector3::new(cos * 5., 2., sin * 5.),
             ..Default::default()
         };
