@@ -1,4 +1,4 @@
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::prelude::*;
 
 use crate::{camera::Camera, lighting::Light, material::Color, math::{Lerp, Ray, Vector3}, object::{Hit, SceneObject}};
 
@@ -45,13 +45,13 @@ impl Default for Scene {
 
 impl Scene {
     /// Develop a list of objects that are struck by a ray.
-    pub fn cast_ray(&self, ray: &Ray) -> Vec<(&Box<dyn SceneObject>, Hit)> {
+    pub fn cast_ray(&self, ray: &Ray) -> Vec<(&dyn SceneObject, Hit)> {
         let mut v = vec![];
 
         // iterate over every object in the scene and test for an intersection
         for object in self.objects.iter() {
             match object.intersect(ray) {
-                Some(hit) => v.push((object, hit)),
+                Some(hit) => v.push((object.as_ref(), hit)),
                 None => continue,
             }
         }
@@ -67,7 +67,7 @@ impl Scene {
     }
 
     /// Cast a ray and return one optional object.
-    pub fn cast_ray_once(&self, ray: &Ray) -> Option<(&Box<dyn SceneObject>, Hit)> {
+    pub fn cast_ray_once(&self, ray: &Ray) -> Option<(&dyn SceneObject, Hit)> {
         let hit = self.cast_ray(ray);
         hit.into_iter().next()
     }
@@ -159,9 +159,14 @@ impl Scene {
         // cleaner because you have the beauty of a well-maintained
         // and researched Rust library developed by very smart people
         // who have optimized for this specific case.
+        //
+        // https://en.wikipedia.org/wiki/Embarrassingly_parallel
         (0..(vw * vh))
             .into_par_iter() // Look at that! Just create a range and parallelize it instantly. Beautiful!
             .map(|i| self.trace_pixel(i % vw, i / vw))
             .collect::<Vec<_>>()
+
+        // We will need more complexity here later if we want to
+        // add a live preview as the image renders.
     }
 }

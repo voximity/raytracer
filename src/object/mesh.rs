@@ -48,7 +48,7 @@ impl Triangle {
         let f = 1. / a;
         let s = ray.origin - self.v0;
         let u = f * s.dot(h);
-        if u < 0. || u > 1. {
+        if !(0. ..= 1.).contains(&u) {
             return None;
         }
 
@@ -149,12 +149,12 @@ impl Mesh {
             .flatten()
             .collect::<Vec<_>>();
 
-        let min_x = vecs.iter().map(|v| v.x).fold(0. / 0., f64::min);
-        let max_x = vecs.iter().map(|v| v.x).fold(0. / 0., f64::max);
-        let min_y = vecs.iter().map(|v| v.y).fold(0. / 0., f64::min);
-        let max_y = vecs.iter().map(|v| v.y).fold(0. / 0., f64::max);
-        let min_z = vecs.iter().map(|v| v.z).fold(0. / 0., f64::min);
-        let max_z = vecs.iter().map(|v| v.z).fold(0. / 0., f64::max);
+        let min_x = vecs.iter().map(|v| v.x).fold(f64::NAN, f64::min);
+        let max_x = vecs.iter().map(|v| v.x).fold(f64::NAN, f64::max);
+        let min_y = vecs.iter().map(|v| v.y).fold(f64::NAN, f64::min);
+        let max_y = vecs.iter().map(|v| v.y).fold(f64::NAN, f64::max);
+        let min_z = vecs.iter().map(|v| v.z).fold(f64::NAN, f64::min);
+        let max_z = vecs.iter().map(|v| v.z).fold(f64::NAN, f64::max);
 
         let center = Vector3::new(
             (min_x + max_x) * 0.5,
@@ -175,9 +175,7 @@ impl Intersect for Mesh {
         // this is a simple optimization method
         // to prevent naively testing against every
         // triangle in the mesh when we're nowhere near it
-        if let None = self.bounding_box.intersect(ray) {
-            return None;
-        }
+        self.bounding_box.intersect(ray)?;
 
         // find all triangles that intersect our ray
         let mut intersected_tris = self

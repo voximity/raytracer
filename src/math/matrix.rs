@@ -148,6 +148,7 @@ impl From<Vector3> for Matrix {
 impl Mul for Matrix {
     type Output = Self;
 
+    #[allow(clippy::needless_range_loop)]
     fn mul(self, rhs: Self) -> Self::Output {
         let a = self.rowed_components();
         let b = rhs.rowed_components();

@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(clippy::many_single_char_names)]
 
 mod camera;
 mod lighting;
@@ -50,7 +51,7 @@ fn main() {
     )));
 
     // add a teapot, everybody needs a teapot!
-    let mut teapot = object::Mesh::from_obj(
+    /*let mut teapot = object::Mesh::from_obj(
         "assets/teapot.obj".into(),
         Material {
             color: Color::new(180, 0, 0),
@@ -61,7 +62,7 @@ fn main() {
     teapot.shift(Vector3::new(0., -2., -8.));
     teapot.recalculate();
 
-    scene.objects.push(Box::new(teapot));
+    scene.objects.push(Box::new(teapot));*/
 
     // and a few adjacent spheres
     scene.objects.push(Box::new(object::Sphere::new(
