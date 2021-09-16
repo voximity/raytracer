@@ -11,11 +11,9 @@ mod scene;
 use std::{f64::consts::PI, fs::File, io::BufReader, ops::Range, time::Instant};
 
 use camera::Camera;
-use material::{Color, Material};
+use material::{Color, Material, Texture};
 use math::Vector3;
 use scene::Scene;
-
-use crate::material::Texture;
 
 pub fn remap(t: f64, a: Range<f64>, b: Range<f64>) -> f64 {
     (t - a.start) * ((b.end - b.start) / (a.end - a.start)) + b.start
@@ -29,7 +27,7 @@ fn main() {
         camera: Camera {
             vw: 1920,
             vh: 1080,
-            origin: Vector3::new(8., 6., -8.),
+            origin: Vector3::new(7., 6., -9.),
             pitch: -0.49,
             yaw: -PI / 4.,
             ..Default::default()
@@ -99,21 +97,34 @@ fn main() {
         },
     )));
 
-    let box_tex = image::load(
-        BufReader::new(File::open("assets/uwl eagle paint.png").unwrap()),
+    let tex = image::load(
+        BufReader::new(File::open("assets/Handle1Tex.png").unwrap()),
         image::ImageFormat::Png,
     )
     .unwrap()
     .into_rgb8();
 
-    scene.objects.push(Box::new(object::Aabb::new(
-        Vector3::new(0., 1., -16.),
-        Vector3::new(2., 2., 2.),
+    // scene.objects.push(Box::new(object::Aabb::new(
+    //     Vector3::new(0., 1., -16.),
+    //     Vector3::new(2., 2., 2.),
+    //     Material {
+    //         texture: Texture::Image(tex),
+    //         reflectiveness: 0.,
+    //     },
+    // )));
+
+    let mut teapot = object::Mesh::from_obj(
+        "assets/fedora.obj".into(),
         Material {
-            texture: Texture::Image(box_tex),
+            texture: Texture::Image(tex),
             reflectiveness: 0.,
         },
-    )));
+    );
+    teapot.scale(3.);
+    teapot.shift(Vector3::new(1., -4., -16.));
+    teapot.recalculate();
+
+    scene.objects.push(Box::new(teapot));
 
     // render out to a list of colors
     println!("Rendering scene");

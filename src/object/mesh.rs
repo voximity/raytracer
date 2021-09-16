@@ -20,14 +20,11 @@ pub struct Triangle {
     /// The texcoords of each vertex.
     texcoords: Option<(u32, u32, u32)>,
 
-    /// The precomputed edge 0.
-    e0: Vector3,
-
     /// The precomputed edge 1.
-    e1: Vector3,
+    edge1: Vector3,
 
     /// The precomputed edge 2.
-    e2: Vector3,
+    edge2: Vector3,
 
     /// The precomputed normal.
     normal: Vector3,
@@ -41,97 +38,56 @@ struct TriIntersect {
     v: f64,
 }
 
-impl TriIntersect {
-    fn u(&self) -> f64 {
-        self.u
-    }
-
-    fn v(&self) -> f64 {
-        self.v
-    }
-
-    fn w(&self) -> f64 {
-        1. - self.u - self.v
-    }
-}
-
 impl Triangle {
+    /// Create a new triangle. It must be `recalculate`d at some point before its usage.
     pub fn new(
         (v0, v1, v2): (Vector3, Vector3, Vector3),
         texcoords: Option<(u32, u32, u32)>,
     ) -> Self {
-        let e0 = v1 - v0;
-        let e1 = v2 - v1;
-        let e2 = v0 - v2;
-        let n = e0.cross(-e2).normalize();
-
         Self {
             v0,
             v1,
             v2,
             texcoords,
-            e0,
-            e1,
-            e2,
-            normal: n,
+            edge1: Vector3::default(),
+            edge2: Vector3::default(),
+            normal: Vector3::default(),
         }
     }
 
     fn recalculate(&mut self) {
-        self.e1 = self.v1 - self.v0;
-        self.e2 = self.v2 - self.v0;
-        self.normal = self.e1.cross(self.e2).normalize();
+        self.edge1 = self.v1 - self.v0;
+        self.edge2 = self.v2 - self.v0;
+        self.normal = self.edge1.cross(self.edge2).normalize();
     }
 
+    // Muller-Trombore ray-triangle intersection algorithm
     fn intersect(&self, ray: &Ray) -> Option<TriIntersect> {
-        let denom = self.normal.dot(self.normal);
-
-        // find P
-        let ndrd = self.normal.dot(ray.direction);
-        if ndrd.abs() < EPSILON {
+        let h = ray.direction.cross(self.edge2);
+        let a = self.edge1.dot(h);
+        if a > -EPSILON && a < EPSILON {
             return None;
         }
 
-        // compute d parameter
-        let d = self.normal.dot(self.v0);
-
-        // compute t
-        let t = (self.normal.dot(ray.origin) + d) / ndrd;
-        if t < 0. {
+        let f = 1. / a;
+        let s = ray.origin - self.v0;
+        let u = f * s.dot(h);
+        if u < 0.0 || u > 1.0 {
             return None;
         }
 
-        // compute the intersection
-        let p = ray.origin + ray.direction * t;
-        let mut c;
-
-        // edge 0
-        let vp0 = p - self.v0;
-        c = self.e0.cross(vp0);
-        if self.normal.dot(c) < 0. {
+        let q = s.cross(self.edge1);
+        let v = f * ray.direction.dot(q);
+        if v < 0.0 || u + v > 1.0 {
             return None;
         }
 
-        // edge 1
-        let vp1 = p - self.v1;
-        c = self.e1.cross(vp1);
-        let mut u = self.normal.dot(c);
-        if u < 0. {
-            return None;
+        let t = f * self.edge2.dot(q);
+        if t > EPSILON {
+            Some(TriIntersect { p: ray.along(t), t, u, v })
+        } else {
+            None
         }
-
-        // edge 2
-        let vp2 = p - self.v2;
-        c = self.e2.cross(vp2);
-        let mut v = self.normal.dot(c);
-        if v < 0. {
-            return None;
-        }
-
-        u /= denom;
-        v /= denom;
-
-        Some(TriIntersect { p, t, u, v })
     }
 
     fn uvs(&self, i: &TriIntersect, tc: &[(f32, f32)]) -> Option<(f32, f32)> {
@@ -139,10 +95,10 @@ impl Triangle {
             None => None,
             Some((a, b, c)) => {
                 let (a, b, c) = (&tc[a as usize], &tc[b as usize], &tc[c as usize]);
-                let iw = i.w();
-                let u = a.0 * i.u as f32 + b.0 * i.v as f32 + c.0 * iw as f32;
-                let v = a.1 * i.u as f32 + b.1 * i.v as f32 + c.1 * iw as f32;
-                Some((u, v))
+                let (iu, iv, iw) = (i.u as f32, i.v as f32, 1. - i.u as f32 - i.v as f32);
+                let u = a.0 * iw + b.0 * iu + c.0 * iv as f32;
+                let v = a.1 * iw + b.1 * iu + c.1 * iv as f32;
+                Some((u, 1. - v))
             }
         }
     }
@@ -177,21 +133,24 @@ impl Mesh {
         .expect("failed to parse obj");
 
         let model = models.into_iter().next().unwrap();
-        let mut texcoords_iter = model.mesh.texcoords.into_iter().peekable();
+        let texcoords_count = model.mesh.texcoords.len() / 2;
+        let mut texcoords_iter = model.mesh.texcoords.into_iter();
         let mut texcoords = vec![];
 
-        while texcoords_iter.peek().is_some() {
-            let (x, y) = (
+        while texcoords.len() < texcoords_count {
+            texcoords.push((
                 texcoords_iter.next().unwrap(),
                 texcoords_iter.next().unwrap(),
-            );
-            texcoords.push((x, y));
+            ));
         }
 
-        let mut iter = model.mesh.indices.into_iter().peekable();
+        let tri_count = model.mesh.indices.len() / 3;
+        let mut iter = model.mesh.indices.into_iter();
+
+        let mut texc_iter = model.mesh.texcoord_indices.into_iter();
 
         let mut triangles = vec![];
-        while iter.peek().is_some() {
+        while triangles.len() < tri_count {
             let v0i = iter.next().unwrap();
             let v1i = iter.next().unwrap();
             let v2i = iter.next().unwrap();
@@ -218,9 +177,9 @@ impl Mesh {
                     None
                 } else {
                     Some((
-                        model.mesh.texcoord_indices[v0i as usize],
-                        model.mesh.texcoord_indices[v1i as usize],
-                        model.mesh.texcoord_indices[v2i as usize],
+                        texc_iter.next().unwrap(),
+                        texc_iter.next().unwrap(),
+                        texc_iter.next().unwrap(),
                     ))
                 },
             ));
@@ -247,15 +206,17 @@ impl Mesh {
             tri.v0 *= delta;
             tri.v1 *= delta;
             tri.v2 *= delta;
-            tri.recalculate();
         }
     }
 
     pub fn recalculate(&mut self) {
         let vecs = self
             .triangles
-            .iter()
-            .map(|v| [&v.v0, &v.v1, &v.v2])
+            .iter_mut()
+            .map(|v| {
+                v.recalculate();
+                [&v.v0, &v.v1, &v.v2]
+            })
             .flatten()
             .collect::<Vec<_>>();
 
@@ -285,7 +246,9 @@ impl Intersect for Mesh {
         // this is a simple optimization method
         // to prevent naively testing against every
         // triangle in the mesh when we're nowhere near it
-        self.bounding_box.intersect(ray)?;
+        if let None = self.bounding_box.intersect(ray) {
+            return None;
+        }
 
         // find all triangles that intersect our ray
         let mut intersected_tris = self
