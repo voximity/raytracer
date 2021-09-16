@@ -27,6 +27,32 @@ impl Color {
     pub fn from_normal(n: Vector3) -> Self {
         Self::newf(n.x / 2. + 0.5, n.y / 2. + 0.5, n.z / 2. + 0.5)
     }
+
+    /// Instantiate a Color from HSV values.
+    ///
+    /// H is expected to be 0 <= H <= 360.
+    pub fn hsv(h: f32, sat: u8, val: u8) -> Self {
+        let s = sat as f32 / 255.;
+        let v = val as f32 / 255.;
+        let c = s * v;
+        let x = c * (1. - ((h / 60.) % 2. - 1.).abs());
+        let _m = v - c;
+        let (r, g, b) = if h >= 0. && h < 60. {
+            (c, x, 0.)
+        } else if h >= 60. && h < 120. {
+            (x, c, 0.)
+        } else if h >= 120. && h < 180. {
+            (0., c, x)
+        } else if h >= 180. && h < 240. {
+            (0., x, c)
+        } else if h >= 240. && h < 300. {
+            (x, 0., c)
+        } else {
+            (c, 0., x)
+        };
+
+        Self::newf(r as f64, g as f64, b as f64)
+    }
 }
 
 impl From<Vector3> for Color {

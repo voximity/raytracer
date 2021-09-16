@@ -8,7 +8,7 @@ mod math;
 mod object;
 mod scene;
 
-use std::{f64::consts::PI, fs::File, io::BufReader, ops::Range, time::Instant};
+use std::{f64::consts::PI, ops::Range, time::Instant};
 
 use camera::Camera;
 use material::{Color, Material, Texture};
@@ -25,106 +25,65 @@ fn main() {
 
     let mut scene = Scene {
         camera: Camera {
-            vw: 1920,
-            vh: 1080,
-            origin: Vector3::new(7., 6., -9.),
-            pitch: -0.49,
+            vw: 2560,
+            vh: 1440,
+            origin: Vector3::new(4., 1.6, 4.),
+            pitch: -0.3,
             yaw: -PI / 4.,
             ..Default::default()
         },
         ..Default::default()
     };
 
-    // add a good ol' sun
-    scene.lights.push(Box::new(lighting::Sun {
-        vector: Vector3::new(-0.4, -1., 0.2).normalize(),
-        ..Default::default()
-    }));
-
-    // maybe a light or two
-    scene.lights.push(Box::new(lighting::Point {
-        position: Vector3::new(-2., 0., -8.),
-        color: Color::new(0, 0, 255),
-        ..Default::default()
-    }));
-
-    scene.lights.push(Box::new(lighting::Point {
-        position: Vector3::new(4., 0., -14.),
-        color: Color::new(255, 0, 0),
-        ..Default::default()
-    }));
+    // add a sun light
+    // scene.lights.push(Box::new(lighting::Sun::default()));
 
     // add a plane
     scene.objects.push(Box::new(object::Plane::new(
-        Vector3::new(0., -2., 0.),
-        Vector3::new(0., 1., 0.),
+        Vector3::new(0., -1., 0.),
+        Vector3::up(),
         Material {
-            texture: Texture::Solid(Color::new(40, 90, 50)),
-            reflectiveness: 0.5,
-        },
+            texture: Texture::Solid(Color::new(180, 180, 180)),
+            reflectiveness: 0.,
+        }
     )));
 
-    // add a teapot, everybody needs a teapot!
-    /*let mut teapot = object::Mesh::from_obj(
-        "assets/teapot.obj".into(),
-        Material {
-            color: Color::new(180, 0, 0),
-            reflectiveness: 0.3,
-        },
-    );
-    teapot.scale(0.8);
-    teapot.shift(Vector3::new(0., -2., -8.));
-    teapot.recalculate();
+    // add the obj in the middle
+    let tex = image::open("assets/Handle1Tex.png").unwrap().to_rgb8();
+    let mut obj = object::Mesh::from_obj("assets/fedora.obj".into(), Material {
+        texture: Texture::Image(tex),
+        reflectiveness: 0.,
+    });
+    obj.scale(2.0);
+    obj.shift(Vector3::new(0.6, -3., 0.));
+    obj.recalculate();
+    scene.objects.push(Box::new(obj));
 
-    scene.objects.push(Box::new(teapot));*/
+    // add some reflective spheres around the center
+    for n in 0..8 {
+        let inner = n as f64 / 8. * PI * 2.;
+        let cos = inner.cos();
+        let sin = inner.sin();
 
-    // and a few adjacent spheres
-    scene.objects.push(Box::new(object::Sphere::new(
-        Vector3::new(-4., 0., -12.),
-        2.,
-        Material {
-            texture: Texture::Solid(Color::new(40, 180, 60)),
-            reflectiveness: 0.,
-        },
-    )));
+        let light = lighting::Point {
+            color: Color::hsv(n as f32 / 8. * 360., 255, 255),
+            intensity: 8.,
+            position: Vector3::new(cos * 5., 2., sin * 5.),
+            ..Default::default()
+        };
 
-    scene.objects.push(Box::new(object::Sphere::new(
-        Vector3::new(4., 0., -20.),
-        2.,
-        Material {
-            texture: Texture::Solid(Color::new(80, 60, 180)),
-            reflectiveness: 0.,
-        },
-    )));
+        let sphere = object::Sphere::new(
+            Vector3::new(cos * 8., 1., sin * 8.),
+            2.,
+            Material {
+                texture: Texture::Solid(Color::new(255, 255, 255)),
+                reflectiveness: 0.9,
+            }
+        );
 
-    let tex = image::load(
-        BufReader::new(File::open("assets/Handle1Tex.png").unwrap()),
-        image::ImageFormat::Png,
-    )
-    .unwrap()
-    .into_rgb8();
-
-    // scene.objects.push(Box::new(object::Aabb::new(
-    //     Vector3::new(0., 1., -16.),
-    //     Vector3::new(2., 2., 2.),
-    //     Material {
-    //         texture: Texture::Image(tex),
-    //         reflectiveness: 0.,
-    //     },
-    // )));
-
-    let mut teapot = object::Mesh::from_obj(
-        "assets/fedora.obj".into(),
-        Material {
-            texture: Texture::Image(tex),
-            reflectiveness: 0.,
-        },
-    );
-    teapot.scale(3.);
-    teapot.shift(Vector3::new(1., -4., -16.));
-    teapot.recalculate();
-
-    scene.objects.push(Box::new(teapot));
+        scene.lights.push(Box::new(light));
+        scene.objects.push(Box::new(sphere));
+    }
 
     // render out to a list of colors
     println!("Rendering scene");

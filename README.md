@@ -69,3 +69,8 @@ Here is an image of a fedora mesh with a texture that I ripped from the game Rob
 
 Later today, or at some point in the future, I'd like to work on adding normal maps (as well as maps for other
 physical properties), but this will require some more implementation details.
+
+Here's another scene I threw together with 8 lights and 10 objects. It is 2560x1440, and took 6.961 seconds
+to render. Not bad, but not great.
+
+![Progress screenshot from 9/16/2021, pt. 2](/images/readme/9_16_2021_2.png)
