@@ -49,8 +49,11 @@ fn main() {
     )));
 
     // add the obj in the middle
-    let tex = image::open("assets/Handle1Tex.png").unwrap().to_rgb8();
-    let mut obj = object::Mesh::from_obj("assets/fedora.obj".into(), Material {
+    let texture_name = "assets/Handle1Tex.png";
+    let obj_name = "assets/fedora.obj";
+
+    let tex = image::open(texture_name).unwrap().to_rgb8();
+    let mut obj = object::Mesh::from_obj(obj_name.into(), Material {
         texture: Texture::Image(tex),
         reflectiveness: 0.,
     });
@@ -67,7 +70,7 @@ fn main() {
 
         let light = lighting::Point {
             color: Color::hsv(n as f32 / 8. * 360., 255, 255),
-            intensity: 6.,
+            intensity: 4.,
             position: Vector3::new(cos * 5., 2., sin * 5.),
             ..Default::default()
         };
@@ -77,7 +80,7 @@ fn main() {
             2.,
             Material {
                 texture: Texture::Solid(Color::new(255, 255, 255)),
-                reflectiveness: 0.9,
+                reflectiveness: 1.,
             }
         );
 

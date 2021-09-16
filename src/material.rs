@@ -94,7 +94,10 @@ impl Texture {
             Self::Image(image) => {
                 let (w, h) = (image.width() as f32, image.height() as f32);
                 image
-                    .get_pixel((u * w).clamp(0., w - 1.) as u32, (v * h).clamp(0., h - 1.) as u32)
+                    .get_pixel(
+                        (u * w).clamp(0., w - 1.) as u32,
+                        (v * h).clamp(0., h - 1.) as u32,
+                    )
                     .to_owned()
                     .into()
             }

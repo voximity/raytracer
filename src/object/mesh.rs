@@ -20,6 +20,9 @@ pub struct Triangle {
     /// The texcoords of each vertex.
     texcoords: Option<(u32, u32, u32)>,
 
+    /// The normals of each vertex. If `None`, the normal of the entire triangle will be used.
+    normals: Option<(u32, u32, u32)>,
+
     /// The precomputed edge 1.
     edge1: Vector3,
 
@@ -43,12 +46,14 @@ impl Triangle {
     pub fn new(
         (v0, v1, v2): (Vector3, Vector3, Vector3),
         texcoords: Option<(u32, u32, u32)>,
+        normals: Option<(u32, u32, u32)>,
     ) -> Self {
         Self {
             v0,
             v1,
             v2,
             texcoords,
+            normals,
             edge1: Vector3::default(),
             edge2: Vector3::default(),
             normal: Vector3::default(),
@@ -84,7 +89,12 @@ impl Triangle {
 
         let t = f * self.edge2.dot(q);
         if t > EPSILON {
-            Some(TriIntersect { p: ray.along(t), t, u, v })
+            Some(TriIntersect {
+                p: ray.along(t),
+                t,
+                u,
+                v,
+            })
         } else {
             None
         }
@@ -102,6 +112,17 @@ impl Triangle {
             }
         }
     }
+
+    fn normal(&self, i: &TriIntersect, ns: &[Vector3]) -> Vector3 {
+        match self.normals {
+            None => self.normal,
+            Some((a, b, c)) => {
+                let (a, b, c) = (&ns[a as usize], &ns[b as usize], &ns[c as usize]);
+                let (u, v, w) = (1. - i.u - i.v, i.u, i.v);
+                *a * u + *b * v + *c * w
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +131,7 @@ pub struct Mesh {
     pub bounding_box: Aabb,
     pub material: Material,
     pub texcoords: Vec<(f32, f32)>,
+    pub normals: Vec<Vector3>,
 }
 
 impl Mesh {
@@ -119,6 +141,7 @@ impl Mesh {
             bounding_box: Default::default(),
             material,
             texcoords: Vec::new(),
+            normals: Vec::new(),
         }
     }
 
@@ -133,6 +156,7 @@ impl Mesh {
         .expect("failed to parse obj");
 
         let model = models.into_iter().next().unwrap();
+
         let texcoords_count = model.mesh.texcoords.len() / 2;
         let mut texcoords_iter = model.mesh.texcoords.into_iter();
         let mut texcoords = vec![];
@@ -144,10 +168,23 @@ impl Mesh {
             ));
         }
 
+        let normals_count = model.mesh.normals.len() / 3;
+        let mut normals_iter = model.mesh.normals.into_iter();
+        let mut normals = vec![];
+
+        while normals.len() < normals_count {
+            normals.push(Vector3::new(
+                normals_iter.next().unwrap() as f64,
+                normals_iter.next().unwrap() as f64,
+                normals_iter.next().unwrap() as f64,
+            ))
+        }
+
         let tri_count = model.mesh.indices.len() / 3;
         let mut iter = model.mesh.indices.into_iter();
 
         let mut texc_iter = model.mesh.texcoord_indices.into_iter();
+        let mut norm_iter = model.mesh.normal_indices.into_iter();
 
         let mut triangles = vec![];
         while triangles.len() < tri_count {
@@ -182,6 +219,15 @@ impl Mesh {
                         texc_iter.next().unwrap(),
                     ))
                 },
+                if normals.is_empty() {
+                    None
+                } else {
+                    Some((
+                        norm_iter.next().unwrap(),
+                        norm_iter.next().unwrap(),
+                        norm_iter.next().unwrap(),
+                    ))
+                },
             ));
         }
 
@@ -190,6 +236,7 @@ impl Mesh {
             material,
             bounding_box: Aabb::default(),
             texcoords,
+            normals,
         }
     }
 
@@ -269,7 +316,9 @@ impl Intersect for Mesh {
 
             // one hit: return the only hit, where t_far is also t_near
             1 => Some(Hit::new(
-                intersected_tris[0].0.normal,
+                intersected_tris[0]
+                    .0
+                    .normal(&intersected_tris[0].1, &self.normals),
                 (intersected_tris[0].1.t, intersected_tris[0].1.p),
                 (intersected_tris[0].1.t, intersected_tris[0].1.p),
                 intersected_tris[0]
@@ -280,7 +329,9 @@ impl Intersect for Mesh {
 
             // two hits: return the first hit, but t_far is the t_near of the second hit (assuming we leave the mesh at this point)
             _ => Some(Hit::new(
-                intersected_tris[0].0.normal,
+                intersected_tris[0]
+                    .0
+                    .normal(&intersected_tris[0].1, &self.normals),
                 (intersected_tris[0].1.t, intersected_tris[0].1.p),
                 (intersected_tris[1].1.t, intersected_tris[1].1.p),
                 intersected_tris[0]
