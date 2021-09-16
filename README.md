@@ -16,6 +16,21 @@ Since the goal of this raytracer is to be fast, here are some things I want to r
 * Run on the GPU somehow?
   * If not, look into using SIMD for accelerated ray intersection math
 
+## Things to add
+
+Along with the above research considerations, here are some rendering features
+I'd like to add in the future:
+
+[ ] Skyboxes
+[ ] Proper refraction
+[ ] Textures (Proper UVs for objects)
+  [ ] Normal maps
+  [ ] Reflectiveness maps
+  [ ] Roughness maps
+[ ] Ambient occlusion
+[ ] Global illumination *(possibly)*
+[ ] Caustics *(possibly, an extremely tricky subject)*
+
 ## Progress
 
 #### 9/14/2021
