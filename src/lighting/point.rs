@@ -49,10 +49,8 @@ impl Light for Point {
     }
 
     fn shading(&self, ray: &Ray, hit: &Hit, scene: &Scene) -> LightShading {
-        let hit_pos = ray.along(hit.near);
-
         // vector pointing from hit to light pos
-        let lvec = self.position - hit_pos;
+        let lvec = self.position - hit.vnear;
 
         // calculate distance and normalize, all at once
         let dist = lvec.magnitude();
@@ -74,7 +72,7 @@ impl Light for Point {
             .powi(self.specular_power);
 
         // apply shadowing
-        let shadow_ray = Ray::new(hit_pos + hit.normal * EPSILON, lvec);
+        let shadow_ray = Ray::new(hit.vnear + hit.normal * EPSILON, lvec);
         if let Some(shadow_hit) = scene.cast_ray_once(&shadow_ray) {
             if shadow_hit.1.near <= dist {
                 // TODO: deal with transparency

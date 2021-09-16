@@ -67,8 +67,7 @@ impl Light for Sun {
 
         // apply shadowing
         if self.shadows {
-            let hit_pos = ray.along(hit.near);
-            let shadow_ray = Ray::new(hit_pos + hit.normal * EPSILON, lvec);
+            let shadow_ray = Ray::new(hit.vnear + hit.normal * EPSILON, lvec);
             if let Some(_shadow_hit) = scene.cast_ray_once(&shadow_ray) {
                 // TODO: deal with transparency
                 diffuse *= self.shadow_coefficient;

@@ -41,7 +41,18 @@ impl Intersect for Sphere {
         let t0 = t2 - t3;
         let t1 = t2 + t3;
 
-        Some(Hit::new((ray.along(t0) - self.origin).normalize(), t0, t1))
+        // TEMPORARY: i really don't feel like doing uv calculation for spheres right now
+        let uv = (0., 0.);
+
+        let vtn = ray.along(t0);
+        let vtf = ray.along(t1);
+
+        Some(Hit::new(
+            (vtn - self.origin).normalize(),
+            (t0, vtn),
+            (t1, vtf),
+            uv,
+        ))
     }
 }
 

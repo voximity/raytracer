@@ -77,6 +77,15 @@ impl Vector3 {
             z: 1. / self.z,
         }
     }
+
+    /// Get the absolute value of this vector.
+    pub fn abs(self) -> Self {
+        Self {
+            x: self.x.abs(),
+            y: self.y.abs(),
+            z: self.z.abs(),
+        }
+    }
 }
 
 impl Add for Vector3 {

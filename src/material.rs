@@ -35,6 +35,12 @@ impl From<Vector3> for Color {
     }
 }
 
+impl From<image::Rgb<u8>> for Color {
+    fn from(rgb: image::Rgb<u8>) -> Self {
+        Self::new(rgb.0[0], rgb.0[1], rgb.0[2])
+    }
+}
+
 impl Lerp for Color {
     fn lerp(self, other: Self, t: f64) -> Self {
         Color {
@@ -45,19 +51,44 @@ impl Lerp for Color {
     }
 }
 
+/// A texture for a material.
+#[derive(Clone, Debug)]
+pub enum Texture {
+    /// A texture that is just a solid color.
+    Solid(Color),
+
+    /// A texture that is an image. UVs will be used to pull the proper pixel.
+    Image(image::RgbImage),
+}
+
+impl Texture {
+    pub fn at(&self, (u, v): (f32, f32)) -> Color {
+        match self {
+            Self::Solid(color) => *color,
+            Self::Image(image) => {
+                let (w, h) = (image.width() as f32, image.height() as f32);
+                image
+                    .get_pixel((u * w).clamp(0., w - 1.) as u32, (v * h).clamp(0., h - 1.) as u32)
+                    .to_owned()
+                    .into()
+            }
+        }
+    }
+}
+
 /// A material for a scene object. Over time, this struct
 /// will be populated with more physical rendering
 /// properties.
 #[derive(Clone, Debug)]
 pub struct Material {
-    pub color: Color,
+    pub texture: Texture,
     pub reflectiveness: f64,
 }
 
 impl Default for Material {
     fn default() -> Self {
         Self {
-            color: Color::new(255, 255, 255),
+            texture: Texture::Solid(Color::new(255, 255, 255)),
             reflectiveness: 0.,
         }
     }

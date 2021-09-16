@@ -52,9 +52,25 @@ impl Intersect for Aabb {
         let pn = ray.along(tn);
         let pf = ray.along(tf);
 
-        
+        let pns = (Vector3::new(1., 1., 1.) - normal.abs()) * (pn - self.pos) / self.size;
 
-        Some(Hit::new(normal, (tn, pn), (tf, pf)))
+        #[rustfmt::skip]
+        let uv: (f64, f64) = match normal {
+            Vector3 { y, .. } if y == 1. => (pns.x, pns.z),
+            Vector3 { y, .. } if y == -1. => (-pns.x, -pns.z),
+            Vector3 { x, .. } if x == 1. => (-pns.z, -pns.y),
+            Vector3 { x, .. } if x == -1. => (pns.z, -pns.y),
+            Vector3 { z, .. } if z == 1. => (pns.x, -pns.y),
+            Vector3 { z, .. } if z == -1. => (-pns.x, -pns.y),
+            _ => (0., 0.),
+        };
+
+        Some(Hit::new(
+            normal,
+            (tn, pn),
+            (tf, pf),
+            (uv.0 as f32 * 0.5 + 0.5, uv.1 as f32 * 0.5 + 0.5),
+        ))
     }
 }
 

@@ -97,7 +97,7 @@ impl Scene {
             None => return Color::from_normal(ray.direction),
         };
 
-        let mut color: Vector3 = object.material().color.into();
+        let mut color: Vector3 = object.material().texture.at(hit.uv).into();
 
         // Calculate light influences
         let mut sum_vecs: Vector3 = self.options.ambient.into();
@@ -124,7 +124,7 @@ impl Scene {
 
             // TODO: should I incorporate some rendering techniques like fresnel to fade or amplify the edges?
             let reflected = self.trace_ray(
-                ray.reflect(ray.along(hit.near) + hit.normal * EPSILON, hit.normal),
+                ray.reflect(hit.vnear + hit.normal * EPSILON, hit.normal),
                 depth + 1,
             );
 

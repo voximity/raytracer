@@ -6,12 +6,8 @@ use crate::{
 
 use super::{Aabb, Hit, Intersect, SceneObject};
 
-/// A texture coordinate, which is really just an optional
-/// reference inside the mesh's texture coordinate array.
-type TexCoord<'a> = &'a (f32, f32);
-
 #[derive(Clone, Debug)]
-pub struct Triangle<'a> {
+pub struct Triangle {
     /// The first vertex of the triangle.
     v0: Vector3,
 
@@ -22,7 +18,7 @@ pub struct Triangle<'a> {
     v2: Vector3,
 
     /// The texcoords of each vertex.
-    texcoords: Option<(TexCoord<'a>, TexCoord<'a>, TexCoord<'a>)>,
+    texcoords: Option<(u32, u32, u32)>,
 
     /// The precomputed edge 0.
     e0: Vector3,
@@ -59,10 +55,10 @@ impl TriIntersect {
     }
 }
 
-impl<'a> Triangle<'a> {
+impl Triangle {
     pub fn new(
         (v0, v1, v2): (Vector3, Vector3, Vector3),
-        texcoords: Option<(TexCoord<'a>, TexCoord<'a>, TexCoord<'a>)>,
+        texcoords: Option<(u32, u32, u32)>,
     ) -> Self {
         let e0 = v1 - v0;
         let e1 = v2 - v1;
@@ -118,7 +114,7 @@ impl<'a> Triangle<'a> {
 
         // edge 1
         let vp1 = p - self.v1;
-        let c = self.e1.cross(vp1);
+        c = self.e1.cross(vp1);
         let mut u = self.normal.dot(c);
         if u < 0. {
             return None;
@@ -138,10 +134,11 @@ impl<'a> Triangle<'a> {
         Some(TriIntersect { p, t, u, v })
     }
 
-    fn uvs(&self, i: &TriIntersect) -> Option<(f32, f32)> {
+    fn uvs(&self, i: &TriIntersect, tc: &[(f32, f32)]) -> Option<(f32, f32)> {
         match self.texcoords {
             None => None,
             Some((a, b, c)) => {
+                let (a, b, c) = (&tc[a as usize], &tc[b as usize], &tc[c as usize]);
                 let iw = i.w();
                 let u = a.0 * i.u as f32 + b.0 * i.v as f32 + c.0 * iw as f32;
                 let v = a.1 * i.u as f32 + b.1 * i.v as f32 + c.1 * iw as f32;
@@ -152,15 +149,15 @@ impl<'a> Triangle<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Mesh<'a> {
-    pub triangles: Vec<Triangle<'a>>,
+pub struct Mesh {
+    pub triangles: Vec<Triangle>,
     pub bounding_box: Aabb,
     pub material: Material,
     pub texcoords: Vec<(f32, f32)>,
 }
 
-impl<'a> Mesh<'a> {
-    pub fn new(triangles: Vec<Triangle<'a>>, material: Material) -> Self {
+impl Mesh {
+    pub fn new(triangles: Vec<Triangle>, material: Material) -> Self {
         Self {
             triangles,
             bounding_box: Default::default(),
@@ -180,7 +177,7 @@ impl<'a> Mesh<'a> {
         .expect("failed to parse obj");
 
         let model = models.into_iter().next().unwrap();
-        let texcoords_iter = model.mesh.texcoords.into_iter().peekable();
+        let mut texcoords_iter = model.mesh.texcoords.into_iter().peekable();
         let mut texcoords = vec![];
 
         while texcoords_iter.peek().is_some() {
@@ -221,9 +218,9 @@ impl<'a> Mesh<'a> {
                     None
                 } else {
                     Some((
-                        &texcoords[model.mesh.texcoord_indices[v0i as usize] as usize],
-                        &texcoords[model.mesh.texcoord_indices[v1i as usize] as usize],
-                        &texcoords[model.mesh.texcoord_indices[v2i as usize] as usize],
+                        model.mesh.texcoord_indices[v0i as usize],
+                        model.mesh.texcoord_indices[v1i as usize],
+                        model.mesh.texcoord_indices[v2i as usize],
                     ))
                 },
             ));
@@ -280,7 +277,7 @@ impl<'a> Mesh<'a> {
     }
 }
 
-impl<'a> Intersect for Mesh<'a> {
+impl Intersect for Mesh {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
         // first, test if we strike the bounding box
         // if we don't, we can simply return
@@ -314,7 +311,7 @@ impl<'a> Intersect for Mesh<'a> {
                 (intersected_tris[0].1.t, intersected_tris[0].1.p),
                 intersected_tris[0]
                     .0
-                    .uvs(&intersected_tris[0].1)
+                    .uvs(&intersected_tris[0].1, &self.texcoords)
                     .unwrap_or_default(),
             )),
 
@@ -325,14 +322,14 @@ impl<'a> Intersect for Mesh<'a> {
                 (intersected_tris[1].1.t, intersected_tris[1].1.p),
                 intersected_tris[0]
                     .0
-                    .uvs(&intersected_tris[0].1)
+                    .uvs(&intersected_tris[0].1, &self.texcoords)
                     .unwrap_or_default(),
             )),
         }
     }
 }
 
-impl<'a> SceneObject for Mesh<'a> {
+impl SceneObject for Mesh {
     fn material(&self) -> &Material {
         &self.material
     }
