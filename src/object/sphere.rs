@@ -50,15 +50,15 @@ impl Intersect for Sphere {
 
         let vtn = ray.along(t0);
         let vtf = ray.along(t1);
+        let norm = (vtn - self.origin).normalize();
 
-        // TEMPORARY: i really don't feel like doing uv calculation for spheres right now
         let uv = (
-            (1. - (vtn.z - self.origin.z).atan2(vtn.x - self.origin.x) as f32 + PI) / (PI * 2.),
-            0.5 * (PI / 4. * (self.origin.y - vtn.y) as f32 / self.radius as f32).tan() + 0.5,
+            0.5 + norm.x.atan2(norm.z) as f32 / (PI * 2.),
+            0.5 - norm.y.asin() as f32 / PI,
         );
 
         Some(Hit::new(
-            (vtn - self.origin).normalize(),
+            norm,
             (t0, vtn),
             (t1, vtf),
             uv,
