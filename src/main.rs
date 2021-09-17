@@ -8,16 +8,12 @@ mod math;
 mod object;
 mod scene;
 
-use std::{f64::consts::PI, ops::Range, time::Instant};
+use std::{f64::consts::PI, time::Instant};
 
 use camera::Camera;
 use material::{Color, Material, Texture};
 use math::Vector3;
 use scene::Scene;
-
-pub fn remap(t: f64, a: Range<f64>, b: Range<f64>) -> f64 {
-    (t - a.start) * ((b.end - b.start) / (a.end - a.start)) + b.start
-}
 
 fn main() {
     println!("Initializing scene");

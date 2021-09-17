@@ -5,25 +5,16 @@ use crate::{
 
 use super::{Hit, Intersect, SceneObject};
 
-/// An axis-aligned box, short for axis-aligned bounding box.
+/// A type that is solely used for intersection with rays.
+/// It is used so that there is less memory overhead than
+/// a typical `Aabb`, which also must return material data.
 #[derive(Debug, Clone, Default)]
-pub struct Aabb {
+pub struct AabbIntersector {
     pub pos: Vector3,
     pub size: Vector3,
-    pub material: Material,
 }
 
-impl Aabb {
-    pub fn new(pos: Vector3, size: Vector3, material: Material) -> Self {
-        Self {
-            pos,
-            size,
-            material,
-        }
-    }
-}
-
-impl Intersect for Aabb {
+impl Intersect for AabbIntersector {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
         let ro = ray.origin - self.pos;
         let s = Vector3::new(
@@ -71,6 +62,45 @@ impl Intersect for Aabb {
             (tf, pf),
             (uv.0 as f32 * 0.5 + 0.5, uv.1 as f32 * 0.5 + 0.5),
         ))
+    }
+}
+
+/// An axis-aligned box, short for axis-aligned bounding box.
+#[derive(Debug, Clone, Default)]
+pub struct Aabb {
+    intersector: AabbIntersector,
+    pub material: Material,
+}
+
+impl Aabb {
+    /// Instantiate a new `Aabb` scene object. Internally, this also instantiates
+    /// an `AabbIntersector`, to which this type wraps around.
+    pub fn new(pos: Vector3, size: Vector3, material: Material) -> Self {
+        Self {
+            intersector: AabbIntersector { pos, size },
+            material,
+        }
+    }
+
+    /// Gets the `pos` of the inner `AabbIntersector`.
+    pub fn pos(&self) -> Vector3 {
+        self.intersector.pos
+    }
+
+    /// Gets the `size` of the inner `AabbIntersector`.
+    pub fn size(&self) -> Vector3 {
+        self.intersector.size
+    }
+
+    /// Consumes this `Aabb`, returning the inner `AabbIntersector`.
+    pub fn into_inner(self) -> AabbIntersector {
+        self.intersector
+    }
+}
+
+impl Intersect for Aabb {
+    fn intersect(&self, ray: &Ray) -> Option<Hit> {
+        self.intersector.intersect(ray)
     }
 }
 

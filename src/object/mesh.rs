@@ -4,7 +4,7 @@ use crate::{
     scene::EPSILON,
 };
 
-use super::{Aabb, Hit, Intersect, SceneObject};
+use super::{AabbIntersector, Hit, Intersect, SceneObject};
 
 #[derive(Clone, Debug)]
 pub struct Triangle {
@@ -128,7 +128,7 @@ impl Triangle {
 #[derive(Clone, Debug)]
 pub struct Mesh {
     pub triangles: Vec<Triangle>,
-    pub bounding_box: Aabb,
+    pub bounding_box: AabbIntersector,
     pub material: Material,
     pub texcoords: Vec<(f32, f32)>,
     pub normals: Vec<Vector3>,
@@ -234,7 +234,7 @@ impl Mesh {
         Self {
             triangles,
             material,
-            bounding_box: Aabb::default(),
+            bounding_box: AabbIntersector::default(),
             texcoords,
             normals,
         }
@@ -281,7 +281,10 @@ impl Mesh {
         );
         let max = Vector3::new(max_x, max_y, max_z);
 
-        self.bounding_box = Aabb::new(center, max - center, Material::default());
+        self.bounding_box = AabbIntersector {
+            pos: center,
+            size: max - center,
+        };
     }
 }
 

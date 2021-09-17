@@ -10,8 +10,13 @@ use super::{Hit, Intersect, SceneObject};
 /// A sphere.
 #[derive(Debug, Clone)]
 pub struct Sphere {
+    /// The origin of the sphere.
     pub origin: Vector3,
+
+    /// The radius of the sphere.
     pub radius: f64,
+
+    /// The material of the sphere.
     pub material: Material,
 }
 

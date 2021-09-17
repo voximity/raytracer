@@ -13,7 +13,7 @@ pub use mesh::*;
 pub use plane::*;
 pub use sphere::*;
 
-/// The result of a ray intersection.
+/// The result of a ray intersection, including hit location data and UV data.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Hit {
     /// The normal (as perceived) of the hit.

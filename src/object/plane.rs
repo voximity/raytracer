@@ -9,9 +9,18 @@ use super::{Hit, Intersect, SceneObject};
 /// A plane.
 #[derive(Debug, Clone)]
 pub struct Plane {
+    /// The origin of the plane.
     pub origin: Vector3,
+
+    /// The normal of the plane.
     pub normal: Vector3,
+
+    /// The plane's material.
     pub material: Material,
+
+    /// The unit by which UVs will be wrapped. For example,
+    /// when this value is 2, UVs will wrap every 2 units
+    /// in both axes.
     pub uv_wrap: f32,
 }
 

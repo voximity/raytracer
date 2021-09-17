@@ -10,11 +10,26 @@ use super::{Light, LightShading, METER};
 /// A point light, which is a light that emits in all directions from a specified position.
 #[derive(Clone, Debug)]
 pub struct Point {
+    /// The color of this light.
     pub color: Color,
+
+    /// The intensity of this light. Not totally sure what real-world unit
+    /// to relate this value to...
     pub intensity: f64,
+
+    /// The power at which specular lighting will be raised to. Generally speaking,
+    /// 16, 32, and 64 are good values.
     pub specular_power: i32,
+
+    /// The strength at which specular lighting will be applied.
     pub specular_strength: f64,
+
+    /// The position in space of this light.
     pub position: Vector3,
+
+    /// The maximum distance at which this light can influence a hit point. It
+    /// will not be considered if the distance from the hit point to the light is
+    /// greater than this value.
     pub max_distance: f64,
 }
 

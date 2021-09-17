@@ -192,8 +192,6 @@ impl Scene {
             );
         }
 
-        imgbuf
-            .save_with_format(path, format)
-            .unwrap();
+        imgbuf.save_with_format(path, format).unwrap();
     }
 }

@@ -11,12 +11,30 @@ use super::{Light, LightShading};
 /// true for all points in the world.
 #[derive(Debug, Clone)]
 pub struct Sun {
+    /// The color of this light.
     pub color: Color,
+
+    /// The intensity of this light. Not totally sure what real-world unit
+    /// to relate this value to...
     pub intensity: f64,
+
+    /// The power at which specular lighting will be raised to. Generally speaking,
+    /// 16, 32, and 64 are good values.
     pub specular_power: i32,
+
+    /// The strength at which specular lighting will be applied.
     pub specular_strength: f64,
+
+    /// The vector direction of this sun light.
     pub vector: Vector3,
+
+    /// Whether or not this sun light should cast shadows.
     pub shadows: bool,
+
+    /// The coefficient a color is multiplied by when it is in shadow.
+    ///
+    /// For example, if a pixel is in shadow and this value is 0.4, it will render
+    /// at 0.4x its base color.
     pub shadow_coefficient: f64,
 }
 

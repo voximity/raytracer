@@ -134,7 +134,7 @@ impl Default for Matrix {
             m12: 0.,
             m20: 0.,
             m21: 0.,
-            m22: 0.,
+            m22: 1.,
         }
     }
 }
