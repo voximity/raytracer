@@ -24,7 +24,7 @@ impl Default for Point {
             color: Color::new(255, 255, 255),
             intensity: 6.,
             specular_power: 32,
-            specular_strength: 0.5,
+            specular_strength: 0.7,
             position: Vector3::new(0., 0., 0.),
             max_distance: 50.,
         }

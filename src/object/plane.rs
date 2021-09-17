@@ -6,15 +6,13 @@ use crate::{
 
 use super::{Hit, Intersect, SceneObject};
 
-/// TEMPORARY: how often to wrap the UVs for a plane
-pub const TEX_WRAP: f32 = 1.;
-
 /// A plane.
 #[derive(Debug, Clone)]
 pub struct Plane {
     pub origin: Vector3,
     pub normal: Vector3,
     pub material: Material,
+    pub uv_wrap: f32,
 }
 
 impl Plane {
@@ -23,6 +21,18 @@ impl Plane {
             origin,
             normal,
             material,
+            ..Default::default()
+        }
+    }
+}
+
+impl Default for Plane {
+    fn default() -> Self {
+        Self {
+            origin: Vector3::default(),
+            normal: Vector3::new(0., 1., 0.),
+            material: Material::default(),
+            uv_wrap: 1.,
         }
     }
 }
@@ -41,7 +51,10 @@ impl Intersect for Plane {
                     self.normal * -denom.signum(),
                     (t, p),
                     (t, p),
-                    (p.x as f32 / TEX_WRAP % 1., p.z as f32 / TEX_WRAP % 1.),
+                    (
+                        (p.x as f32 / self.uv_wrap).rem_euclid(1.),
+                        (p.z as f32 / self.uv_wrap).rem_euclid(1.),
+                    ),
                 ))
             } else {
                 None

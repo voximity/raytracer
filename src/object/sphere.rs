@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use crate::{
     material::Material,
     math::{Ray, Vector3},
@@ -41,11 +43,14 @@ impl Intersect for Sphere {
         let t0 = t2 - t3;
         let t1 = t2 + t3;
 
-        // TEMPORARY: i really don't feel like doing uv calculation for spheres right now
-        let uv = (0., 0.);
-
         let vtn = ray.along(t0);
         let vtf = ray.along(t1);
+
+        // TEMPORARY: i really don't feel like doing uv calculation for spheres right now
+        let uv = (
+            (1. - (vtn.z - self.origin.z).atan2(vtn.x - self.origin.x) as f32 + PI) / (PI * 2.),
+            0.5 * (PI / 4. * (self.origin.y - vtn.y) as f32 / self.radius as f32).tan() + 0.5,
+        );
 
         Some(Hit::new(
             (vtn - self.origin).normalize(),

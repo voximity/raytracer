@@ -23,7 +23,7 @@ I'd like to add in the future:
 
 - [ ] Skyboxes
 - [ ] Proper refraction
-- [ ] Textures (Proper UVs for objects)
+- [x] Textures (Proper UVs for objects)
   - [ ] Normal maps
   - [ ] Reflectiveness maps
   - [ ] Roughness maps

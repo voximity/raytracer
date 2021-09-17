@@ -25,10 +25,10 @@ fn main() {
 
     let mut scene = Scene {
         camera: Camera {
-            vw: 2560,
-            vh: 1440,
-            origin: Vector3::new(4., 1.6, 4.),
-            pitch: -0.3,
+            vw: 1920,
+            vh: 1080,
+            origin: Vector3::new(4., 2., 4.),
+            pitch: -0.35,
             yaw: -PI / 4.,
             ..Default::default()
         },
@@ -39,24 +39,29 @@ fn main() {
     // scene.lights.push(Box::new(lighting::Sun::default()));
 
     // add a plane
-    scene.objects.push(Box::new(object::Plane::new(
-        Vector3::new(0., -1., 0.),
-        Vector3::up(),
-        Material {
+    scene.objects.push(Box::new(object::Plane {
+        origin: Vector3::new(0., -1., 0.),
+        normal: Vector3::up(),
+        material: Material {
             texture: Texture::Solid(Color::new(180, 180, 180)),
             reflectiveness: 0.,
-        }
-    )));
+        },
+        uv_wrap: 2.,
+    }));
 
     // add the obj in the middle
     let texture_name = "assets/Handle1Tex.png";
     let obj_name = "assets/fedora.obj";
 
     let tex = image::open(texture_name).unwrap().to_rgb8();
-    let mut obj = object::Mesh::from_obj(obj_name.into(), Material {
-        texture: Texture::Image(tex),
-        reflectiveness: 0.,
-    });
+
+    let mut obj = object::Mesh::from_obj(
+        obj_name.into(),
+        Material {
+            texture: Texture::Image(tex),
+            reflectiveness: 0.,
+        },
+    );
     obj.scale(2.0);
     obj.shift(Vector3::new(0.6, -3., 0.));
     obj.recalculate();
@@ -66,22 +71,24 @@ fn main() {
     for n in 0..8 {
         let inner = n as f64 / 8. * PI * 2.;
         let cos = inner.cos();
+
+        let color = Color::hsv(n as f32 / 8. * 360., 255, 255);
         let sin = inner.sin();
 
         let light = lighting::Point {
-            color: Color::hsv(n as f32 / 8. * 360., 255, 255),
+            color,
             intensity: 4.,
             position: Vector3::new(cos * 5., 2., sin * 5.),
             ..Default::default()
         };
 
         let sphere = object::Sphere::new(
-            Vector3::new(cos * 8., 1., sin * 8.),
-            2.,
+            Vector3::new(cos * 9., 2., sin * 9.),
+            3.,
             Material {
-                texture: Texture::Solid(Color::new(255, 255, 255)),
-                reflectiveness: 1.,
-            }
+                texture: Texture::Solid(color),
+                reflectiveness: 0.9,
+            },
         );
 
         scene.lights.push(Box::new(light));
@@ -90,24 +97,7 @@ fn main() {
 
     // render out to a list of colors
     println!("Rendering scene");
-    let rendered = scene.render();
-
-    // spit out an image
-    println!("Saving to image");
-    let mut imgbuf: image::RgbImage =
-        image::ImageBuffer::new(scene.camera.vw as u32, scene.camera.vh as u32);
-
-    for (i, color) in rendered.into_iter().enumerate() {
-        imgbuf.put_pixel(
-            i as u32 % scene.camera.vw as u32,
-            i as u32 / scene.camera.vw as u32,
-            image::Rgb([color.r, color.g, color.b]),
-        );
-    }
-
-    imgbuf
-        .save_with_format("render.png", image::ImageFormat::Png)
-        .unwrap();
+    scene.render_to("render.png", image::ImageFormat::Png);
 
     println!(
         "Operation complete in {}s",

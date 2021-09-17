@@ -175,4 +175,25 @@ impl Scene {
         // We will need more complexity here later if we want to
         // add a live preview as the image renders.
     }
+
+    /// Render the image out to the desired save file.
+    pub fn render_to(&self, path: &str, format: image::ImageFormat) {
+        let rendered = self.render();
+
+        // spit out an image
+        let mut imgbuf: image::RgbImage =
+            image::ImageBuffer::new(self.camera.vw as u32, self.camera.vh as u32);
+
+        for (i, color) in rendered.into_iter().enumerate() {
+            imgbuf.put_pixel(
+                i as u32 % self.camera.vw as u32,
+                i as u32 / self.camera.vw as u32,
+                image::Rgb([color.r, color.g, color.b]),
+            );
+        }
+
+        imgbuf
+            .save_with_format(path, format)
+            .unwrap();
+    }
 }

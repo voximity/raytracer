@@ -16,11 +16,22 @@ pub use sphere::*;
 /// The result of a ray intersection.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Hit {
+    /// The normal (as perceived) of the hit.
     pub normal: Vector3,
+
+    /// The near t of the hit.
     pub near: f64,
+
+    /// The near point of the hit.
     pub vnear: Vector3,
+
+    /// The far t of the hit.
     pub far: f64,
+
+    /// The far point of the hit.
     pub vfar: Vector3,
+
+    /// The UV coordinates of the hit, for texture polling.
     pub uv: (f32, f32),
 }
 

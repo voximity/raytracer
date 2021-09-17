@@ -9,6 +9,26 @@ pub struct Color {
 }
 
 impl Color {
+    pub fn white() -> Self {
+        Self::new(255, 255, 255)
+    }
+
+    pub fn black() -> Self {
+        Self::new(0, 0, 0)
+    }
+
+    pub fn red() -> Self {
+        Self::new(255, 0, 0)
+    }
+
+    pub fn green() -> Self {
+        Self::new(0, 255, 0)
+    }
+
+    pub fn blue() -> Self {
+        Self::new(0, 0, 255)
+    }
+
     /// Instantiate a new Color.
     pub fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
@@ -85,6 +105,9 @@ pub enum Texture {
 
     /// A texture that is an image. UVs will be used to pull the proper pixel.
     Image(image::RgbImage),
+
+    /// A texture that is a 2x2 checkerboard of two colors.
+    Checkerboard(Color, Color),
 }
 
 impl Texture {
@@ -101,6 +124,12 @@ impl Texture {
                     .to_owned()
                     .into()
             }
+            Self::Checkerboard(col_a, col_b) => match (u > 0.5, v > 0.5) {
+                (false, false) => *col_a,
+                (true, false) => *col_b,
+                (false, true) => *col_b,
+                (true, true) => *col_a,
+            },
         }
     }
 }
@@ -108,7 +137,7 @@ impl Texture {
 /// A material for a scene object. Over time, this struct
 /// will be populated with more physical rendering
 /// properties.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Material {
     pub texture: Texture,
     pub reflectiveness: f64,
