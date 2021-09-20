@@ -7,6 +7,7 @@ mod material;
 mod math;
 mod object;
 mod scene;
+mod skybox;
 
 use std::{f64::consts::PI, time::Instant};
 
@@ -19,6 +20,8 @@ fn main() {
     println!("Initializing scene");
     let start_time = Instant::now();
 
+    let skybox_tex = image::open("assets/skybox.jpg").unwrap().to_rgb8();
+
     let mut scene = Scene {
         camera: Camera {
             vw: 1920,
@@ -28,6 +31,7 @@ fn main() {
             yaw: -PI / 4.,
             ..Default::default()
         },
+        skybox: Box::new(skybox::Cubemap::new(skybox_tex)),
         ..Default::default()
     };
 

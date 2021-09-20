@@ -6,6 +6,7 @@ use crate::{
     material::Color,
     math::{Lerp, Ray, Vector3},
     object::{Hit, SceneObject},
+    skybox::{self, Skybox},
 };
 
 /// A very small value, close to zero, to prevent weird overlapping.
@@ -35,6 +36,7 @@ pub struct Scene {
     pub objects: Vec<Box<dyn SceneObject>>,
     pub lights: Vec<Box<dyn Light>>,
     pub camera: Camera,
+    pub skybox: Box<dyn Skybox>,
     pub options: SceneOptions,
 }
 
@@ -44,6 +46,7 @@ impl Default for Scene {
             objects: Vec::new(),
             lights: Vec::new(),
             camera: Camera::default(),
+            skybox: Box::new(skybox::Normal),
             options: SceneOptions::default(),
         }
     }
@@ -91,10 +94,9 @@ impl Scene {
         // unique scene object for every ray. This is slow, but for
         // scenes of only a few objects, it's not really a problem.
 
-        // as a test, we take the normal color of the ray's direction for the skybox (just for now)
         let (object, hit) = match self.cast_ray_once(&ray) {
             Some(r) => r,
-            None => return Color::from_normal(ray.direction),
+            None => return self.skybox.ray_color(&ray),
         };
 
         let mut color: Vector3 = object.material().texture.at(hit.uv).into();

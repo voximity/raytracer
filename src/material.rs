@@ -83,7 +83,13 @@ impl From<Vector3> for Color {
 
 impl From<image::Rgb<u8>> for Color {
     fn from(rgb: image::Rgb<u8>) -> Self {
-        Self::new(rgb.0[0], rgb.0[1], rgb.0[2])
+        rgb.0.into()
+    }
+}
+
+impl From<[u8; 3]> for Color {
+    fn from(slice: [u8; 3]) -> Self {
+        Self::new(slice[0], slice[1], slice[2])
     }
 }
 

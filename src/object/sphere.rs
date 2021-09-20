@@ -57,12 +57,7 @@ impl Intersect for Sphere {
             0.5 - norm.y.asin() as f32 / PI,
         );
 
-        Some(Hit::new(
-            norm,
-            (t0, vtn),
-            (t1, vtf),
-            uv,
-        ))
+        Some(Hit::new(norm, (t0, vtn), (t1, vtf), uv))
     }
 }
 

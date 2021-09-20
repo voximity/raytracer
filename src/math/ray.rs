@@ -8,7 +8,7 @@ pub struct Ray {
 
     /// The direction of this ray.
     pub direction: Vector3,
-    
+
     m: Vector3,
 }
 
