@@ -21,7 +21,7 @@ Since the goal of this raytracer is to be fast, here are some things I want to r
 Along with the above research considerations, here are some rendering features
 I'd like to add in the future:
 
-- [ ] Skyboxes
+- [x] Skyboxes
 - [ ] Proper refraction
 - [x] Textures (Proper UVs for objects)
   - [ ] Normal maps
@@ -74,3 +74,10 @@ Here's another scene I threw together with 8 lights and 10 objects. It is 2560x1
 to render. Not bad, but not great.
 
 ![Progress screenshot from 9/16/2021, pt. 2](/images/readme/9_16_2021_2.png)
+
+#### 9/20/2021
+
+I took a break because I went home this weekend, but today I added skybox support, including support for
+cubemaps. Here's what the previous scene looks like with a cubemap I stole from Google Images:
+
+![Progress screenshot from 9/20/2021](/images/readme/9_20_2021.png)
