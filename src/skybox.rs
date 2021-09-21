@@ -1,6 +1,6 @@
 use crate::{
     material::Color,
-    math::{Ray, Vector3},
+    math::{blerp, Ray, Vector3},
     object::{AabbIntersector, Hit, Intersect},
 };
 
@@ -61,10 +61,27 @@ impl Cubemap {
     }
 
     pub fn poll_tex(&self, cx: u32, cy: u32, x: f32, y: f32) -> Color {
-        // TODO: use bilinear interpolation for less pixellated cubemap polling
-        let x = cx * self.cell_size + (x * self.cell_size as f32) as u32;
-        let y = cy * self.cell_size + (y * self.cell_size as f32) as u32;
-        self.tex.get_pixel(x, y).0.into()
+        let x = (cx * self.cell_size) as f64 + x as f64 * (self.cell_size - 1) as f64;
+        let y = (cy * self.cell_size) as f64 + y as f64 * (self.cell_size - 1) as f64;
+        if x % 1. == 0. && y % 1. == 0. {
+            self.tex.get_pixel(x as u32, y as u32).0.into()
+        } else {
+            let (xmin, xmax) = (x.floor(), x.ceil());
+            let (ymin, ymax) = (y.floor(), y.ceil());
+            let c00: Color = self.tex.get_pixel(xmin as u32, ymin as u32).0.into();
+            let c10: Color = self.tex.get_pixel(xmax as u32, ymin as u32).0.into();
+            let c01: Color = self.tex.get_pixel(xmin as u32, ymax as u32).0.into();
+            let c11: Color = self.tex.get_pixel(xmax as u32, ymax as u32).0.into();
+            blerp(
+                (x - xmin) / (xmax - xmin),
+                (y - ymin) / (ymax - ymin),
+                c00.into(),
+                c10.into(),
+                c01.into(),
+                c11.into(),
+            )
+            .into()
+        }
     }
 }
 
@@ -76,9 +93,9 @@ impl Skybox for Cubemap {
         let (cx, cy) = if normal.z == -1. {
             (1, 1)
         } else if normal.x == -1. {
-            (0, 1)
-        } else if normal.x == 1. {
             (2, 1)
+        } else if normal.x == 1. {
+            (0, 1)
         } else if normal.z == 1. {
             (3, 1)
         } else if normal.y == 1. {

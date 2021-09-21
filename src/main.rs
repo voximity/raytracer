@@ -20,7 +20,7 @@ fn main() {
     println!("Initializing scene");
     let start_time = Instant::now();
 
-    let skybox_tex = image::open("assets/skybox.jpg").unwrap().to_rgb8();
+    let skybox_tex = image::open("assets/skybox_test.png").unwrap().to_rgb8();
 
     let mut scene = Scene {
         camera: Camera {
