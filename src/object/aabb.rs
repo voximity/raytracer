@@ -75,7 +75,7 @@ impl AabbIntersector {
 impl From<acceleration::Aabb> for AabbIntersector {
     fn from(aabb: acceleration::Aabb) -> Self {
         Self {
-            pos: aabb.centroid(),
+            pos: aabb.centroid,
             size: aabb.max - aabb.min,
         }
     }

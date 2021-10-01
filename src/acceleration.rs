@@ -62,13 +62,14 @@ impl<T> Drop for AtomicArena<T> {
 /// An axis-aligned bounding box, stored by its minimum and maximum corners.
 #[derive(Debug, Clone)]
 pub struct Aabb {
+    pub centroid: Vector3,
     pub min: Vector3,
     pub max: Vector3,
 }
 
 impl Aabb {
     pub fn new(min: Vector3, max: Vector3) -> Self {
-        Self { min, max }
+        Self { centroid: (min + max) * 0.5, min, max }
     }
 
     pub fn from_vecs(vecs: &[Vector3]) -> Self {
@@ -85,11 +86,7 @@ impl Aabb {
             max.z = max.z.max(v.z);
         }
 
-        Self { min, max }
-    }
-
-    pub fn centroid(&self) -> Vector3 {
-        (self.min + self.max) / 2.
+        Self { centroid: (min + max) * 0.5, min, max }
     }
 
     pub fn union(&self, other: &Self) -> Self {
@@ -104,7 +101,7 @@ impl Aabb {
             self.max.z.max(other.max.z),
         );
 
-        Self { min, max }
+        Self { centroid: (min + max) * 0.5, min, max }
     }
 
     pub fn surface_area(&self) -> f64 {
@@ -120,18 +117,19 @@ impl Aabb {
     }
 
     pub fn intersect(&self, ray: &Ray) -> bool {
-        let pos = self.centroid();
-        let size = self.max - pos;
+        let size = self.max - self.centroid;
 
-        let ro = ray.origin - pos;
+        let nro = self.centroid - ray.origin;
         let s = Vector3::new(
             -ray.direction.x.signum(),
             -ray.direction.y.signum(),
             -ray.direction.z.signum(),
         );
 
-        let t1 = ray.inverse() * (-ro + (s * size));
-        let t2 = ray.inverse() * (-ro - (s * size));
+        let ri = ray.inverse();
+        let ssize = s * size;
+        let t1 = ri * (nro + ssize);
+        let t2 = ri * (nro - ssize);
         let tn = f64::max(f64::max(t1.x, t1.y), t1.z);
         let tf = f64::min(f64::min(t2.x, t2.y), t2.z);
 
@@ -142,6 +140,7 @@ impl Aabb {
 impl Default for Aabb {
     fn default() -> Self {
         Self {
+            centroid: Vector3::new(0., 0., 0.),
             min: VECTOR_MAX,
             max: VECTOR_MIN,
         }
@@ -151,7 +150,7 @@ impl Default for Aabb {
 impl From<AabbIntersector> for Aabb {
     fn from(intersector: AabbIntersector) -> Self {
         let (min, max) = intersector.bounds();
-        Aabb { min, max }
+        Aabb { centroid: (min + max) * 0.5, min, max }
     }
 }
 
@@ -190,7 +189,7 @@ fn object_split_candidate(
 
     // place refs into buckets
     for idx in input {
-        let bucket_idx = ((refs[*idx].bounding_box.centroid().axis(split_axis)
+        let bucket_idx = ((refs[*idx].bounding_box.centroid.axis(split_axis)
             - aabb_total.min.axis(split_axis))
             / extent
             * (OBJECT_BUCKETS as f64)) as usize;
@@ -248,7 +247,7 @@ fn object_split(
     let mut lhs_ptr = 0;
     let mut rhs_ptr = output.len() - 1;
     for idx in input {
-        let this_bucket = ((refs[*idx].bounding_box.centroid().axis(split_axis)
+        let this_bucket = ((refs[*idx].bounding_box.centroid.axis(split_axis)
             - aabb_total.min.axis(split_axis))
             / extent
             * (OBJECT_BUCKETS as f64)) as usize;
