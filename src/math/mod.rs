@@ -29,3 +29,11 @@ pub fn blerp(tx: f64, ty: f64, c00: Vector3, c10: Vector3, c01: Vector3, c11: Ve
 pub trait Lerp {
     fn lerp(self, other: Self, t: f64) -> Self;
 }
+
+/// An axis.
+#[derive(Debug, Clone, Copy)]
+pub enum Axis {
+    X,
+    Y,
+    Z,
+}

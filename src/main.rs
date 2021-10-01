@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 #![allow(clippy::many_single_char_names)]
+#![feature(new_uninit)]
 
+mod acceleration;
 mod camera;
 mod lighting;
 mod material;
@@ -20,7 +22,7 @@ fn main() {
     println!("Initializing scene");
     let start_time = Instant::now();
 
-    let skybox_tex = image::open("assets/skybox_test.png").unwrap().to_rgb8();
+    let skybox_tex = image::open("assets/skybox.jpg").unwrap().to_rgb8();
 
     let mut scene = Scene {
         camera: Camera {
@@ -35,23 +37,20 @@ fn main() {
         ..Default::default()
     };
 
-    // add a sun light
-    // scene.lights.push(Box::new(lighting::Sun::default()));
-
     // add a plane
     scene.objects.push(Box::new(object::Plane {
         origin: Vector3::new(0., -1., 0.),
         normal: Vector3::up(),
         material: Material {
-            texture: Texture::Solid(Color::new(180, 180, 180)),
+            texture: Texture::Checkerboard(Color::white(), Color::new(40, 40, 40)), //Texture::Solid(Color::new(180, 180, 180)),
             reflectiveness: 0.,
         },
         uv_wrap: 2.,
     }));
 
     // add the obj in the middle
-    let texture_name = "assets/Handle1Tex.png";
-    let obj_name = "assets/fedora.obj";
+    let texture_name = "assets/raytraced-isaac.png";
+    let obj_name = "assets/raytraced-isaac.obj";
 
     let tex = image::open(texture_name).unwrap().to_rgb8();
 
@@ -62,8 +61,8 @@ fn main() {
             reflectiveness: 0.,
         },
     );
-    obj.scale(2.0);
-    obj.shift(Vector3::new(0.6, -3., 0.));
+    obj.scale(0.8);
+    obj.shift(Vector3::new(0.6, -1., 0.));
     obj.recalculate();
     scene.objects.push(Box::new(obj));
 
@@ -83,8 +82,8 @@ fn main() {
         };
 
         let sphere = object::Sphere::new(
-            Vector3::new(cos * 9., 2., sin * 9.),
-            3.,
+            Vector3::new(cos * 8., 1., sin * 8.),
+            2.,
             Material {
                 texture: Texture::Solid(color),
                 reflectiveness: 0.9,
@@ -101,6 +100,7 @@ fn main() {
 
     println!(
         "Operation complete in {}s",
-        start_time.elapsed().as_secs() as f32 + start_time.elapsed().subsec_millis() as f32 / 1000.
+        start_time.elapsed().as_secs() as f32
+            + start_time.elapsed().subsec_nanos() as f32 / 1000000000.
     );
 }

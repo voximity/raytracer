@@ -1,4 +1,5 @@
 use crate::{
+    acceleration,
     material::Material,
     math::{Ray, Vector3},
     scene::EPSILON,
@@ -8,14 +9,8 @@ use super::{AabbIntersector, Hit, Intersect, SceneObject};
 
 #[derive(Clone, Debug)]
 pub struct Triangle {
-    /// The first vertex of the triangle.
-    v0: Vector3,
-
-    /// The second vertex of the triangle.
-    v1: Vector3,
-
-    /// The third vertex of the triangle.
-    v2: Vector3,
+    /// The vertices of the triangle.
+    v: [Vector3; 3],
 
     /// The texcoords of each vertex.
     texcoords: Option<(u32, u32, u32)>,
@@ -31,6 +26,9 @@ pub struct Triangle {
 
     /// The precomputed normal.
     normal: Vector3,
+
+    /// The bounding box.
+    bounding_box: acceleration::Aabb,
 }
 
 #[derive(Debug, Clone)]
@@ -48,22 +46,24 @@ impl Triangle {
         texcoords: Option<(u32, u32, u32)>,
         normals: Option<(u32, u32, u32)>,
     ) -> Self {
+        let v = [v0, v1, v2];
+        let bounding_box = acceleration::Aabb::from_vecs(&v);
         Self {
-            v0,
-            v1,
-            v2,
+            v,
             texcoords,
             normals,
             edge1: Vector3::default(),
             edge2: Vector3::default(),
             normal: Vector3::default(),
+            bounding_box,
         }
     }
 
     fn recalculate(&mut self) {
-        self.edge1 = self.v1 - self.v0;
-        self.edge2 = self.v2 - self.v0;
+        self.edge1 = self.v[1] - self.v[0];
+        self.edge2 = self.v[2] - self.v[0];
         self.normal = self.edge1.cross(self.edge2).normalize();
+        self.bounding_box = acceleration::Aabb::from_vecs(&self.v);
     }
 
     // Muller-Trombore ray-triangle intersection algorithm
@@ -75,7 +75,7 @@ impl Triangle {
         }
 
         let f = 1. / a;
-        let s = ray.origin - self.v0;
+        let s = ray.origin - self.v[0];
         let u = f * s.dot(h);
         if u < 0.0 || u > 1.0 {
             return None;
@@ -125,19 +125,47 @@ impl Triangle {
     }
 }
 
-#[derive(Clone, Debug)]
+impl acceleration::Primitive for Triangle {
+    fn points(&self) -> &[Vector3] {
+        &self.v
+    }
+
+    fn split(&self, _split: acceleration::Split) -> (Self, Option<Self>) {
+        (self.clone(), None) // TODO: this eventually
+    }
+
+    fn bounding_box(&self) -> &acceleration::Aabb {
+        &self.bounding_box
+    }
+}
+
 pub struct Mesh {
     pub triangles: Vec<Triangle>,
+    pub sbvh: Option<acceleration::TreeNode>,
     pub bounding_box: AabbIntersector,
     pub material: Material,
     pub texcoords: Vec<(f32, f32)>,
     pub normals: Vec<Vector3>,
 }
 
+impl Clone for Mesh {
+    fn clone(&self) -> Self {
+        Self {
+            triangles: self.triangles.clone(),
+            sbvh: None,
+            bounding_box: self.bounding_box.clone(),
+            material: self.material.clone(),
+            texcoords: self.texcoords.clone(),
+            normals: self.normals.clone(),
+        }
+    }
+}
+
 impl Mesh {
     pub fn new(triangles: Vec<Triangle>, material: Material) -> Self {
         Self {
             triangles,
+            sbvh: None,
             bounding_box: Default::default(),
             material,
             texcoords: Vec::new(),
@@ -230,9 +258,9 @@ impl Mesh {
                 },
             ));
         }
-
         Self {
             triangles,
+            sbvh: None,
             material,
             bounding_box: AabbIntersector::default(),
             texcoords,
@@ -242,17 +270,17 @@ impl Mesh {
 
     pub fn shift(&mut self, delta: Vector3) {
         for tri in self.triangles.iter_mut() {
-            tri.v0 += delta;
-            tri.v1 += delta;
-            tri.v2 += delta;
+            tri.v[0] += delta;
+            tri.v[1] += delta;
+            tri.v[2] += delta;
         }
     }
 
     pub fn scale(&mut self, delta: f64) {
         for tri in self.triangles.iter_mut() {
-            tri.v0 *= delta;
-            tri.v1 *= delta;
-            tri.v2 *= delta;
+            tri.v[0] *= delta;
+            tri.v[1] *= delta;
+            tri.v[2] *= delta;
         }
     }
 
@@ -262,7 +290,7 @@ impl Mesh {
             .iter_mut()
             .map(|v| {
                 v.recalculate();
-                [&v.v0, &v.v1, &v.v2]
+                &v.v
             })
             .flatten()
             .collect::<Vec<_>>();
@@ -285,24 +313,49 @@ impl Mesh {
             pos: center,
             size: max - center,
         };
+
+        self.sbvh = Some(acceleration::Sbvh::new(&self.triangles).into());
+    }
+
+    fn sbvh_intersection(&self, node: &acceleration::TreeNode, ray: &Ray) -> Vec<usize> {
+        assert!(self.sbvh.is_some());
+
+        let bounding = match node {
+            acceleration::TreeNode::Leaf { bounding, .. } => bounding,
+            acceleration::TreeNode::Branch { bounding, .. } => bounding,
+        };
+
+        if !bounding.intersect(ray) {
+            return vec![];
+        }
+
+        match node {
+            acceleration::TreeNode::Branch { a, b, .. } => self
+                .sbvh_intersection(a, ray)
+                .into_iter()
+                .chain(self.sbvh_intersection(b, ray).into_iter())
+                .collect(),
+            acceleration::TreeNode::Leaf { indices, .. } => indices.clone(),
+        }
     }
 }
 
 impl Intersect for Mesh {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        // first, test if we strike the bounding box
-        // if we don't, we can simply return
-        //
-        // this is a simple optimization method
-        // to prevent naively testing against every
-        // triangle in the mesh when we're nowhere near it
-        if let None = self.bounding_box.intersect(ray) {
+        assert!(self.sbvh.is_some());
+
+        let tris = self
+            .sbvh_intersection(self.sbvh.as_ref().unwrap(), ray)
+            .into_iter()
+            .map(|i| &self.triangles[i])
+            .collect::<Vec<_>>();
+
+        if tris.is_empty() {
             return None;
         }
 
         // find all triangles that intersect our ray
-        let mut intersected_tris = self
-            .triangles
+        let mut intersected_tris = tris
             .iter()
             .filter_map(|t| t.intersect(ray).map(|h| (t, h)))
             .collect::<Vec<_>>();

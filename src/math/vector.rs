@@ -2,7 +2,18 @@ use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub};
 
 use crate::material::Color;
 
-use super::{lerp, Lerp};
+use super::{lerp, Axis, Lerp};
+
+pub const VECTOR_MAX: Vector3 = Vector3 {
+    x: f64::MAX,
+    y: f64::MAX,
+    z: f64::MAX,
+};
+pub const VECTOR_MIN: Vector3 = Vector3 {
+    x: f64::MIN,
+    y: f64::MIN,
+    z: f64::MIN,
+};
 
 /// A vector in 3D space.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
@@ -84,6 +95,15 @@ impl Vector3 {
             x: self.x.abs(),
             y: self.y.abs(),
             z: self.z.abs(),
+        }
+    }
+
+    /// Get an axis value from this vector.
+    pub fn axis(&self, axis: Axis) -> f64 {
+        match axis {
+            Axis::X => self.x,
+            Axis::Y => self.y,
+            Axis::Z => self.z,
         }
     }
 }

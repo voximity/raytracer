@@ -60,6 +60,7 @@ impl Cubemap {
         }
     }
 
+    /// Grab a pixel from the cubemap at a certain cell.
     pub fn poll_tex(&self, cx: u32, cy: u32, x: f32, y: f32) -> Color {
         let x = (cx * self.cell_size) as f64 + x as f64 * (self.cell_size - 1) as f64;
         let y = (cy * self.cell_size) as f64 + y as f64 * (self.cell_size - 1) as f64;

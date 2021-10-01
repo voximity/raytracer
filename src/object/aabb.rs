@@ -1,4 +1,5 @@
 use crate::{
+    acceleration,
     material::Material,
     math::{Ray, Vector3},
 };
@@ -62,6 +63,21 @@ impl Intersect for AabbIntersector {
             (tf, pf),
             (uv.0 as f32 * 0.5 + 0.5, uv.1 as f32 * 0.5 + 0.5),
         ))
+    }
+}
+
+impl AabbIntersector {
+    pub fn bounds(&self) -> (Vector3, Vector3) {
+        (self.pos - self.size, self.pos + self.size)
+    }
+}
+
+impl From<acceleration::Aabb> for AabbIntersector {
+    fn from(aabb: acceleration::Aabb) -> Self {
+        Self {
+            pos: aabb.centroid(),
+            size: aabb.max - aabb.min,
+        }
     }
 }
 
