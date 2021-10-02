@@ -49,8 +49,8 @@ fn main() {
     }));
 
     // add the obj in the middle
-    let texture_name = "assets/raytraced-isaac.png";
-    let obj_name = "assets/raytraced-isaac.obj";
+    let texture_name = "assets/Handle1Tex.png";
+    let obj_name = "assets/fedora.obj";
 
     let tex = image::open(texture_name).unwrap().to_rgb8();
 
@@ -61,8 +61,8 @@ fn main() {
             reflectiveness: 0.,
         },
     );
-    obj.scale(0.8);
-    obj.shift(Vector3::new(0.6, -1., 0.));
+    obj.scale(2.0);
+    obj.shift(Vector3::new(0.6, -3., 0.));
     obj.recalculate();
     scene.objects.push(Box::new(obj));
 

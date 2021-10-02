@@ -317,25 +317,24 @@ impl Mesh {
         self.sbvh = Some(acceleration::Sbvh::new(&self.triangles).into());
     }
 
-    fn sbvh_intersection(&self, node: &acceleration::TreeNode, ray: &Ray) -> Vec<usize> {
-        assert!(self.sbvh.is_some());
-
-        let bounding = match node {
-            acceleration::TreeNode::Leaf { bounding, .. } => bounding,
-            acceleration::TreeNode::Branch { bounding, .. } => bounding,
-        };
-
-        if !bounding.intersect(ray) {
-            return vec![];
+    fn sbvh_intersection(&self, node: &acceleration::TreeNode, ray: &Ray) -> Option<Vec<usize>> {
+        if !node.bounding().intersect(ray) {
+            return None;
         }
 
         match node {
-            acceleration::TreeNode::Branch { a, b, .. } => self
-                .sbvh_intersection(a, ray)
-                .into_iter()
-                .chain(self.sbvh_intersection(b, ray).into_iter())
-                .collect(),
-            acceleration::TreeNode::Leaf { indices, .. } => indices.clone(),
+            acceleration::TreeNode::Branch { a, b, .. } => {
+                match (
+                    self.sbvh_intersection(a, ray),
+                    self.sbvh_intersection(b, ray),
+                ) {
+                    (Some(av), Some(bv)) => Some(av.into_iter().chain(bv).collect()),
+                    (Some(av), None) => Some(av),
+                    (None, Some(bv)) => Some(bv),
+                    (None, None) => None,
+                }
+            }
+            acceleration::TreeNode::Leaf { indices, .. } => Some(indices.clone()),
         }
     }
 }
@@ -344,11 +343,13 @@ impl Intersect for Mesh {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
         assert!(self.sbvh.is_some());
 
-        let tris = self
-            .sbvh_intersection(self.sbvh.as_ref().unwrap(), ray)
-            .into_iter()
-            .map(|i| &self.triangles[i])
-            .collect::<Vec<_>>();
+        let tris = match self.sbvh_intersection(self.sbvh.as_ref().unwrap(), ray) {
+            Some(v) => v,
+            None => return None,
+        }
+        .into_iter()
+        .map(|i| &self.triangles[i])
+        .collect::<Vec<_>>();
 
         if tris.is_empty() {
             return None;

@@ -12,7 +12,10 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{math::{Axis, Ray, VECTOR_MAX, VECTOR_MIN, Vector3}, object::AabbIntersector};
+use crate::{
+    math::{Axis, Ray, Vector3, VECTOR_MAX, VECTOR_MIN},
+    object::AabbIntersector,
+};
 
 const OBJECT_BUCKETS: usize = 32;
 
@@ -69,7 +72,11 @@ pub struct Aabb {
 
 impl Aabb {
     pub fn new(min: Vector3, max: Vector3) -> Self {
-        Self { centroid: (min + max) * 0.5, min, max }
+        Self {
+            centroid: (min + max) * 0.5,
+            min,
+            max,
+        }
     }
 
     pub fn from_vecs(vecs: &[Vector3]) -> Self {
@@ -86,7 +93,11 @@ impl Aabb {
             max.z = max.z.max(v.z);
         }
 
-        Self { centroid: (min + max) * 0.5, min, max }
+        Self {
+            centroid: (min + max) * 0.5,
+            min,
+            max,
+        }
     }
 
     pub fn union(&self, other: &Self) -> Self {
@@ -101,7 +112,11 @@ impl Aabb {
             self.max.z.max(other.max.z),
         );
 
-        Self { centroid: (min + max) * 0.5, min, max }
+        Self {
+            centroid: (min + max) * 0.5,
+            min,
+            max,
+        }
     }
 
     pub fn surface_area(&self) -> f64 {
@@ -126,10 +141,9 @@ impl Aabb {
             -ray.direction.z.signum(),
         );
 
-        let ri = ray.inverse();
         let ssize = s * size;
-        let t1 = ri * (nro + ssize);
-        let t2 = ri * (nro - ssize);
+        let t1 = ray.inverse() * (nro + ssize);
+        let t2 = ray.inverse() * (nro - ssize);
         let tn = f64::max(f64::max(t1.x, t1.y), t1.z);
         let tf = f64::min(f64::min(t2.x, t2.y), t2.z);
 
@@ -150,7 +164,11 @@ impl Default for Aabb {
 impl From<AabbIntersector> for Aabb {
     fn from(intersector: AabbIntersector) -> Self {
         let (min, max) = intersector.bounds();
-        Aabb { centroid: (min + max) * 0.5, min, max }
+        Aabb {
+            centroid: (min + max) * 0.5,
+            min,
+            max,
+        }
     }
 }
 
@@ -417,5 +435,14 @@ fn sbvh_to_tree_node(sbvh: &Sbvh, idx: usize) -> TreeNode {
 impl Into<TreeNode> for Sbvh {
     fn into(self) -> TreeNode {
         sbvh_to_tree_node(&self, self.root_node)
+    }
+}
+
+impl TreeNode {
+    pub fn bounding(&self) -> &Aabb {
+        match self {
+            TreeNode::Branch { bounding, .. } => bounding,
+            TreeNode::Leaf { bounding, .. } => bounding,
+        }
     }
 }
