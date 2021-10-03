@@ -145,8 +145,18 @@ impl Texture {
 /// properties.
 #[derive(Debug, Clone)]
 pub struct Material {
+    /// The texture of this material.
     pub texture: Texture,
+
+    /// The reflectiveness (0 to 1) of this material.
     pub reflectiveness: f64,
+
+    /// The transparency of this object. At N=1, the object is completely transparent. At N=0, the object is completely opaque.
+    pub transparency: f64,
+
+    /// The index of refraction of this material. Higher numbers are more affected by refraction.
+    /// At IOR=1, light passes through perfectly.
+    pub ior: f64,
 }
 
 impl Default for Material {
@@ -154,6 +164,8 @@ impl Default for Material {
         Self {
             texture: Texture::Solid(Color::new(255, 255, 255)),
             reflectiveness: 0.,
+            transparency: 0.,
+            ior: 1.3,
         }
     }
 }

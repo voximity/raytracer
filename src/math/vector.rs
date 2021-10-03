@@ -106,6 +106,11 @@ impl Vector3 {
             Axis::Z => self.z,
         }
     }
+
+    /// Get the angle between this vector and another.
+    pub fn angle(&self, other: Self) -> f64 {
+        (self.dot(other) / (self.magnitude() * other.magnitude())).acos()
+    }
 }
 
 impl Add for Vector3 {

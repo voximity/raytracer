@@ -421,7 +421,7 @@ fn sbvh_to_tree_node(sbvh: &Sbvh, idx: usize) -> TreeNode {
 
     match sbvh.nodes.get(idx).unwrap() {
         SbvhNode::Leaf { refs } => TreeNode::Leaf {
-            indices: refs.into_iter().map(|r| r.prim_idx).collect(),
+            indices: refs.iter().map(|r| r.prim_idx).collect(),
             bounding,
         },
         SbvhNode::Node { lhs, rhs } => TreeNode::Branch {
@@ -432,9 +432,9 @@ fn sbvh_to_tree_node(sbvh: &Sbvh, idx: usize) -> TreeNode {
     }
 }
 
-impl Into<TreeNode> for Sbvh {
-    fn into(self) -> TreeNode {
-        sbvh_to_tree_node(&self, self.root_node)
+impl From<Sbvh> for TreeNode {
+    fn from(sbvh: Sbvh) -> Self {
+        sbvh_to_tree_node(&sbvh, sbvh.root_node)
     }
 }
 

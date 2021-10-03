@@ -37,3 +37,21 @@ pub enum Axis {
     Y,
     Z,
 }
+
+/// Calculate the refraction vectors based on a ray, a normal, and the two IORs.
+pub fn refraction_vec(
+    in_ray: &Ray,
+    normal: Vector3,
+    from_ior: f64,
+    to_ior: f64,
+) -> Option<Vector3> {
+    let n = from_ior / to_ior;
+    let cos_i = -normal.dot(in_ray.direction);
+    let sin_t2 = n * n * (1. - cos_i * cos_i);
+    if sin_t2 > 1. {
+        return None;
+    }
+
+    let cos_t = (1. - sin_t2).sqrt();
+    Some(in_ray.direction * n + normal * (n * cos_i - cos_t))
+}

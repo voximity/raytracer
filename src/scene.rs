@@ -4,7 +4,7 @@ use crate::{
     camera::Camera,
     lighting::Light,
     material::Color,
-    math::{Lerp, Ray, Vector3},
+    math::{refraction_vec, Lerp, Ray, Vector3},
     object::{Hit, SceneObject},
     skybox::{self, Skybox},
 };
@@ -116,10 +116,68 @@ impl Scene {
 
         color = color * sum_vecs;
 
-        // todo: refraction
+        let (reflectiveness, transparency, ior) = (
+            object.material().reflectiveness,
+            object.material().transparency,
+            object.material().ior,
+        );
+        if transparency > EPSILON && depth < self.options.max_ray_depth {
+            // if the IOR is just one, we can continue by getting the ray color
+            // at the opposite end of this object
+            let mut transparency_color = color;
+            if ior == 1. {
+                let thru = self.trace_ray(Ray::new(hit.vfar, ray.direction), depth + 1);
 
-        let reflectiveness = object.material().reflectiveness;
-        if reflectiveness > EPSILON && depth < self.options.max_ray_depth {
+                transparency_color = thru.into();
+            } else {
+                // find the angle between the incidence and the normal
+                // the higher the IOR, the higher the new ray should tend toward the normal
+                let ref_vec = refraction_vec(&ray, hit.normal, 1., ior).unwrap();
+
+                // calculate the exit position for the new ray
+                if let Some(ref_hit) = object.intersect(&Ray::new(hit.vnear - ref_vec, ref_vec)) {
+                    // now find the normal of the other side
+                    if let Some(exit_hit) =
+                        object.intersect(&Ray::new(ref_hit.vfar + ref_vec, -ref_vec))
+                    {
+                        let exit_ref_vec = refraction_vec(
+                            &Ray::new(ref_hit.vfar, ref_vec),
+                            -exit_hit.normal,
+                            ior,
+                            1.,
+                        )
+                        .unwrap();
+
+                        let ref_col = self.trace_ray(
+                            Ray::new(ref_hit.vfar + exit_ref_vec * EPSILON, exit_ref_vec),
+                            depth + 1,
+                        );
+                        transparency_color = ref_col.into();
+                    }
+                }
+            }
+
+            // if we're at all reflective, apply fresnel reflections
+            if reflectiveness > EPSILON {
+                // we raise this to a power of two so that edge reflections are much more strong than center reflections
+                let dot = (1. + ray.direction.dot(hit.normal)).powi(1);
+
+                let reflected = self.trace_ray(
+                    ray.reflect(hit.vnear + hit.normal * EPSILON, hit.normal),
+                    depth + 1,
+                );
+
+                // mix in the reflected color highest at the edges
+                // TODO: incorporate `reflectiveness` here
+                transparency_color = transparency_color.lerp(reflected.into(), dot);
+            }
+
+            color = color.lerp(transparency_color, transparency);
+        }
+
+        if reflectiveness > EPSILON && depth < self.options.max_ray_depth && transparency < EPSILON
+        {
+            // don't account for transparency, we do this above
             // reflect off this object, and mix in the final color
             // we do this just slightly off the surface of the
             // hit object so as not to cause any weird overlap
