@@ -11,7 +11,7 @@ mod object;
 mod scene;
 mod skybox;
 
-use std::time::Instant;
+use std::{f64::consts::PI, time::Instant};
 
 use camera::Camera;
 use material::{Color, Material, Texture};
@@ -28,9 +28,9 @@ fn main() {
         camera: Camera {
             vw: 1920,
             vh: 1080,
-            origin: Vector3::new(4., 2., 4.),
-            pitch: -0.2,
-            yaw: -0.5,
+            origin: Vector3::new(0., 0., 6.),
+            pitch: 0.,
+            yaw: 0.,
             ..Default::default()
         },
         skybox: Box::new(skybox::Cubemap::new(skybox_tex)),

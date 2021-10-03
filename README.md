@@ -11,6 +11,7 @@ Since the goal of this raytracer is to be fast, here are some things I want to r
 * Acceleration structures
   * Octrees (I have an implementation of this already)
   * BVH ([this paper by Nvidia](https://www.nvidia.in/docs/IO/77714/sbvh.pdf) looks like a great resource)
+    * This has been implemented!
   * More?
 * Better parallelism (currently made possible by Rayon, a data parallelism library)
 * Run on the GPU somehow?
@@ -22,7 +23,7 @@ Along with the above research considerations, here are some rendering features
 I'd like to add in the future:
 
 - [x] Skyboxes
-- [ ] Proper refraction
+- [x] Proper refraction
 - [x] Textures (Proper UVs for objects)
   - [ ] Normal maps
   - [ ] Reflectiveness maps
@@ -81,3 +82,13 @@ I took a break because I went home this weekend, but today I added skybox suppor
 cubemaps. Here's what the previous scene looks like with a cubemap I stole from Google Images:
 
 ![Progress screenshot from 9/20/2021](/images/readme/9_20_2021.png)
+
+#### 10/3/2021
+
+I haven't updated this in a while but since, I've added a number of extra textures, refraction, and most
+importantly, an implementation of a BVH that builds from top-down, making mesh renders extremely fast.
+
+Here's a scene with one light, 4 objects, a semi-detailed mesh, and refraction + reflections to
+demonstrate. It is 1920x1080, and rendered in 0.1127 seconds.
+
+![Progress screenshot from 10/3/2021](/images/readme/10_3_2021.png)
