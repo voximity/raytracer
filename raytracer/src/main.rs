@@ -11,7 +11,7 @@ mod object;
 mod scene;
 mod skybox;
 
-use std::{f64::consts::PI, time::Instant};
+use std::time::Instant;
 
 use camera::Camera;
 use material::{Color, Material, Texture};
@@ -22,7 +22,7 @@ fn main() {
     println!("Initializing scene");
     let start_time = Instant::now();
 
-    let skybox_tex = image::open("assets/skybox.jpg").unwrap().to_rgb8();
+    let skybox_tex = image::open("assets/cubemap.jpg").unwrap().to_rgb8();
 
     let mut scene = Scene {
         camera: Camera {
@@ -104,12 +104,14 @@ fn main() {
     )));
 
     // render out to a list of colors
-    println!("Rendering scene");
+    println!(
+        "Initializing complete in {}s. Rendering scene...",
+        start_time.elapsed().as_secs_f32(),
+    );
     scene.render_to("render.png", image::ImageFormat::Png);
 
     println!(
-        "Operation complete in {}s",
-        start_time.elapsed().as_secs() as f32
-            + start_time.elapsed().subsec_nanos() as f32 / 1000000000.
+        "Init/render complete in {}s",
+        start_time.elapsed().as_secs_f32(),
     );
 }

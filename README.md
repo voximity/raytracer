@@ -4,6 +4,13 @@ This is a raytracer written in Rust for my apprenticeship project at UW-L.
 
 TODO: write more of me
 
+## Crates
+
+As of now, there are two crates in this project:
+
+* `raytracer` - The raytracer itself, which takes a scene, raytraces it, and outputs it to a file.
+* `stitcher` - A cubemap stitcher. Provided 6 cubemap faces, this outputs a single atlas that can be used by the raytracer.
+
 ## Things to research
 
 Since the goal of this raytracer is to be fast, here are some things I want to research more on:
