@@ -99,3 +99,20 @@ Here's a scene with one light, 4 objects, a semi-detailed mesh, and refraction +
 demonstrate. It is 1920x1080, and rendered in 0.1127 seconds.
 
 ![Progress screenshot from 10/3/2021](/images/readme/10_3_2021.png)
+
+#### 10/4/2021
+
+Today, I realized that scene construction when loading assets into memory is actually pretty slow, so I
+added a way to differentiate between scene construction time and render time, which is a very important
+thing to take into account for this scene in particular:
+
+![Progress screenshot from 10/4/2021](/images/readme/10_4_2021.png)
+
+This image renders in 0.41624472s, but 0.3187096s of those are dedicated to scene construction. This includes
+loading assets into memory and processing them (decoding image files, reading OBJ files, etc.), but presumably
+almost all of it is loading and decoding the 3 MB cubemap into memory. This means this render *actually* took
+0.09753512s, which is very fast at 1920x1080, with a mesh, refractions, and reflections.
+
+Here's an image of the same scene from above:
+
+![Progress screenshot from 10/4/2021](/images/readme/10_4_2021_2.png)

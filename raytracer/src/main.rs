@@ -28,9 +28,9 @@ fn main() {
         camera: Camera {
             vw: 1920,
             vh: 1080,
-            origin: Vector3::new(0., 0., 6.),
-            pitch: 0.,
-            yaw: 0.,
+            origin: Vector3::new(8., 2.3, 0.),
+            pitch: -0.23,
+            yaw: -std::f64::consts::PI * 0.33,
             ..Default::default()
         },
         skybox: Box::new(skybox::Cubemap::new(skybox_tex)),
