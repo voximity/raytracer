@@ -98,5 +98,7 @@ fn main() {
     }
 
     // write it out
-    imgbuf.save(matches.value_of("output").unwrap()).expect("Failed to save cubemap atlas");
+    imgbuf
+        .save(matches.value_of("output").unwrap())
+        .expect("Failed to save cubemap atlas");
 }

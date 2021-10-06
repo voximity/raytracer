@@ -29,8 +29,8 @@ pub struct Camera {
 impl Default for Camera {
     fn default() -> Self {
         Self {
-            vw: 300,
-            vh: 200,
+            vw: 800,
+            vh: 600,
             origin: Vector3::default(),
             yaw: 0.,
             pitch: 0.,
