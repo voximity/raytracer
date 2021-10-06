@@ -10,6 +10,8 @@ As of now, there are two crates in this project:
 
 * `raytracer` - The raytracer itself, which takes a scene, raytraces it, and outputs it to a file.
 * `stitcher` - A cubemap stitcher. Provided 6 cubemap faces, this outputs a single atlas that can be used by the raytracer.
+* `sdl` - The raytracer's proprietary scene description language, loosely inspired by POV-Ray's. This crate has its own tokenizer, AST, and interpreter for parsing SDL files.
+* `sdl_lua` - An SDL runtime that uses Lua to describe a scene. This crate is only included for completeness; it is not in a functional state.
 
 ## Things to research
 
@@ -116,3 +118,30 @@ almost all of it is loading and decoding the 3 MB cubemap into memory. This mean
 Here's an image of the same scene from above:
 
 ![Progress screenshot from 10/4/2021](/images/readme/10_4_2021_2.png)
+
+#### 10/6/2021
+
+Today, I started working on the SDL tokenizer and AST. It can parse basic SDL files. At this point, it is
+capable of describing objects and their properties, but I would like to add some more imperative programming
+constructs like loops over a range to automatically construct circles.
+
+As of now, the SDL looks something like this:
+
+```
+sphere {
+  position: <0, 0, 0>,
+  radius: 1,
+  material: {
+    color: <1, 0, 0>,
+    reflectiveness: 0.3,
+  },
+}
+
+aabb {
+  position: <3, 3, 3>,
+  size: <4, 2, 2>,
+  material: {
+    color: <0, 0.6, 1>,
+  }
+}
+```

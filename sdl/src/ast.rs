@@ -25,6 +25,9 @@ pub enum Node {
         properties: HashMap<String, Node>,
     },
 
+    /// A dictionary. It acts as a map whose keys are identifiers and whose values are more AST nodes.
+    Dictionary(HashMap<String, Node>),
+
     /// An identifier.
     Identifier(String),
 
@@ -72,15 +75,32 @@ impl AstParser {
             Token::String(str) => Ok(Node::String(str)),
             Token::Number(num) => Ok(Node::Number(num)),
             Token::Op(Op::Lt) => Ok(self.read_vector()?),
+            Token::Brace(true) => Ok(self.read_dict()?),
             t => Err(AstError::UnexpectedToken("a value".into(), t)),
         }
     }
 
     fn read_object(&mut self, identifier: String) -> Result<Node, AstError> {
+        // the identifier has already been read
+
         // read the opening brace
         self.read_expecting(Token::Brace(true))?;
 
-        // read as many key-values as possible
+        // read the properties
+        let props = self.read_dict()?;
+
+        Ok(Node::Object {
+            name: identifier,
+            properties: match props {
+                Node::Dictionary(dict) => dict,
+                _ => unreachable!(),
+            },
+        })
+    }
+
+    fn read_dict(&mut self) -> Result<Node, AstError> {
+        // we assume the opening brace has already been read
+
         let mut dict = vec![];
 
         loop {
@@ -101,10 +121,7 @@ impl AstParser {
             }
         }
 
-        Ok(Node::Object {
-            name: identifier,
-            properties: dict.into_iter().collect(),
-        })
+        Ok(Node::Dictionary(dict.into_iter().collect()))
     }
 
     fn read_vector(&mut self) -> Result<Node, AstError> {
