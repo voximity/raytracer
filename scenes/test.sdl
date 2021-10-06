@@ -1,9 +1,9 @@
-
-
 sphere {
-    position: <0, 0, 0>,
-    radius: 5,
-    material: {
-        reflectiveness: 0.8,
-    }
+    position: <1, 2, 3>,
+    radius: 3.14,
+}
+
+aabb {
+    position: <4, 5, 6>,
+    size: <1, 1, 1>,
 }

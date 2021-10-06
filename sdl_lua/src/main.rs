@@ -1,17 +1,24 @@
 use std::{fs, sync::mpsc, time::Duration};
 
 use clap::{App, Arg};
-use raytracer::{material::Material, math::Vector3, object, scene::Scene};
+use raytracer::{
+    lua::LuaSceneObject,
+    material::Material,
+    math::Vector3,
+    object::{self, SceneObject},
+    scene::Scene,
+};
 use rlua::Lua;
 
-macro_rules! userdata_constructor {
-    ($ctx:ident $globals:ident: $n:literal => $e:expr) => {
-        $globals.set($n, $ctx.create_function($e).unwrap()).unwrap();
+macro_rules! userdata_constructors {
+    ($ctx:ident $globals:ident: $($n:literal => $e:expr),+$(,)?) => {
+        $($globals.set($n, $ctx.create_function($e).unwrap()).unwrap();)+
     };
 }
 
 enum SdlOp {
     SetViewportSize(i32, i32),
+    AddObject(Box<dyn SceneObject>),
 }
 
 fn main() {
@@ -35,19 +42,15 @@ fn main() {
         let globals = ctx.globals();
 
         // userdata construction
-        userdata_constructor!(ctx globals: "Vector3" => |_, (x, y, z): (f64, f64, f64)| Ok(Vector3 { x, y, z }));
-        userdata_constructor!(ctx globals: "Aabb" => |_, (pos, size): (Vector3, Vector3)| Ok(object::Aabb::new(pos, size, Material::default())));
+        userdata_constructors!(ctx globals:
+            "Vector3" => |_, (x, y, z): (f64, f64, f64)| Ok(Vector3 { x, y, z }),
+            "Aabb" => |_, (pos, size): (Vector3, Vector3)| Ok(object::Aabb::new(pos, size, Material::default())),
+        );
 
-        globals
-            .set(
-                "viewport_size",
-                ctx.create_function(move |_, (vw, vh): (i32, i32)| {
-                    tx.clone().send(SdlOp::SetViewportSize(vw, vh)).unwrap();
-                    Ok(())
-                })
-                .unwrap(),
-            )
-            .unwrap();
+        globals.set("viewport_size", ctx.create_function(move |_, (vw, vh): (i32, i32)| {
+            tx.clone().send(SdlOp::SetViewportSize(vw, vh)).unwrap();
+            Ok(())
+        }).unwrap()).unwrap();
 
         ctx.load(
             &fs::read_to_string(matches.value_of("SOURCE").unwrap())
@@ -63,6 +66,7 @@ fn main() {
                 scene.camera.vw = vw;
                 scene.camera.vh = vh;
             }
+            SdlOp::AddObject(obj) => scene.objects.push(obj),
         }
     }
 

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "raytracer",
+    "sdl",
     "sdl_lua",
     "stitcher"
 ]
