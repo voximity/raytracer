@@ -6,14 +6,14 @@ camera {
     vh: 1080,
 
     fov: 60,
-    origin: sub(<0, 3, 0>, <3, 0, 0>),
+    origin: <-3, 3, 0>,
     pitch: -0.5,
-    yaw: div(pi(), 7),
+    yaw: 0.4,
 }
 
 # We just need one sun light.
 sun {
-    vector: normalize(<-0.8, -1, -0.3>),
+    vector: <-0.8, -1, -0.3>,
     intensity: 0.8,
     specular_power: 64,
 }

@@ -280,11 +280,6 @@ impl AstParser {
 
     /// Advance the token stream, or error with `AstError::UnexpectedEof`.
     fn next(&mut self) -> Result<Token, AstError> {
-        let next_token = self.tokens.next().ok_or(AstError::UnexpectedEof)?;
-        if let Token::Comment = next_token {
-            self.next()
-        } else {
-            Ok(next_token)
-        }
+        self.tokens.next().ok_or(AstError::UnexpectedEof)
     }
 }
