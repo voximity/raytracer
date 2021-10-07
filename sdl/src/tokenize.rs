@@ -36,6 +36,8 @@ pub enum Sep {
     BraceClose,
     ParensOpen,
     ParensClose,
+    BracketOpen,
+    BracketClose,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -65,6 +67,8 @@ impl Display for Token {
             Self::Sep(Sep::BraceClose) => write!(f, "}}"),
             Self::Sep(Sep::ParensOpen) => write!(f, "("),
             Self::Sep(Sep::ParensClose) => write!(f, ")"),
+            Self::Sep(Sep::BracketOpen) => write!(f, "["),
+            Self::Sep(Sep::BracketClose) => write!(f, "]"),
 
             Self::Op(Op::Lt) => write!(f, "<"),
             Self::Op(Op::Gt) => write!(f, ">"),
@@ -107,13 +111,13 @@ impl<R: Read + Seek> Tokenizer<R> {
                 _ if c.is_whitespace() => self.skip()?,
 
                 // alphabetical characters: identifier
-                'A'..='z' => tokens.push(Token::Identifier(self.read_identifier()?)),
+                'A'..='Z' | 'a'..='z' => tokens.push(Token::Identifier(self.read_identifier()?)),
 
                 // a quote: string
                 '"' => tokens.push(Token::String(self.read_string()?)),
 
                 // a number: number
-                '0'..='9' | '.' => tokens.push(Token::Number(self.read_number()?)),
+                '0'..='9' | '.' | '-' => tokens.push(Token::Number(self.read_number()?)),
 
                 '<' => {
                     tokens.push(Token::Op(Op::Lt));
@@ -141,6 +145,14 @@ impl<R: Read + Seek> Tokenizer<R> {
                 }
                 ')' => {
                     tokens.push(Sep::ParensClose.into());
+                    self.skip()?;
+                }
+                '[' => {
+                    tokens.push(Sep::BracketOpen.into());
+                    self.skip()?;
+                }
+                ']' => {
+                    tokens.push(Sep::BracketClose.into());
                     self.skip()?;
                 }
                 ':' => {
@@ -188,6 +200,12 @@ impl<R: Read + Seek> Tokenizer<R> {
 
     /// Read a number, which is an f64. Decimal optional.
     fn read_number(&mut self) -> Result<f64, TokenizeError> {
+        let negative = if let Ok('-') = self.peek_next() {
+            self.next()?;
+            true
+        } else {
+            false
+        };
         let mut pre_dec = String::new(); // chars before the .
         let mut post_dec = String::new(); // chars after the .
         let mut dec_seen = false;
@@ -224,6 +242,7 @@ impl<R: Read + Seek> Tokenizer<R> {
 
         format!("{}.{}", pre_dec, post_dec)
             .parse()
+            .map(|n: f64| if negative { -n } else { n })
             .map_err(|_| TokenizeError::NumberParseError)
     }
 

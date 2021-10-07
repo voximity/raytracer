@@ -1,9 +1,13 @@
 sphere {
-    position: <0, 0, 0>,
-    radius: random(1, 2, 3, "hello", 4, sin(threehundred, 0.1)),
+    position: <0, 0, -5>,
+    radius: 1,
     material: {
-        transparency: 0.6,
-        reflectiveness: 0.4,
-        ior: 1.333,
-    },
+        reflectiveness: 0.5,
+        transparency: 0.3,
+    }
+}
+
+aabb {
+    position: <0, 0, -15>,
+    size: <5, 1, 1>
 }

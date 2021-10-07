@@ -6,7 +6,10 @@ use ast::AstParser;
 use clap::{App, Arg};
 use tokenize::Tokenizer;
 
+use crate::interpret::Interpreter;
+
 mod ast;
+mod interpret;
 mod reader;
 mod tokenize;
 
@@ -21,15 +24,16 @@ fn main() {
                 .required(true)
                 .index(1),
         )
+        .arg(
+            Arg::with_name("output")
+                .long("output")
+                .short("o")
+                .help("The output file")
+                .default_value("render.png")
+                .required(false),
+        )
         .get_matches();
 
-    let ast = AstParser::new(
-        Tokenizer::new(File::open(matches.value_of("SOURCE").unwrap()).unwrap())
-            .tokenize()
-            .unwrap(),
-    )
-    .parse_root()
-    .unwrap();
-
-    println!("{:?}", ast);
+    let scene = Interpreter::new(File::open(matches.value_of("SOURCE").unwrap()).unwrap()).unwrap().run().unwrap();
+    scene.render_to(matches.value_of("output").unwrap(), image::ImageFormat::Png);
 }

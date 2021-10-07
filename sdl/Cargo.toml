@@ -8,5 +8,6 @@ edition = "2021"
 
 [dependencies]
 clap = "2.33.3"
+image = "0.23.14"
 raytracer = { path = "../raytracer" }
 thiserror = "1.0.29"

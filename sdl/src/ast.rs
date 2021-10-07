@@ -104,7 +104,7 @@ impl AstParser {
     }
 
     /// Read a scene object.
-    /// 
+    ///
     /// An example scene object:
     /// ```
     /// sphere {
@@ -135,7 +135,7 @@ impl AstParser {
     }
 
     /// Read a dictionary.
-    /// 
+    ///
     /// An example dictionary:
     /// ```
     /// {
@@ -173,7 +173,7 @@ impl AstParser {
     }
 
     /// Read a vector.
-    /// 
+    ///
     /// An example vector:
     /// ```
     /// <1.1, 2.4, 6.7>
@@ -214,7 +214,7 @@ impl AstParser {
 
     /// Read a list of parsable things from closure `item: I`, delimited by closure `delimiter: D`,
     /// or closed by list closer token `close_token`.
-    /// 
+    ///
     /// For example, a list of values can simply be read with `read_list(Self::read_value, |s| s.read_sep(Sep::Comma), Token::Sep(Sep::ParensClose))`.
     fn read_list<I, D, T>(
         &mut self,
