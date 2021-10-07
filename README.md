@@ -13,6 +13,8 @@ As of now, there are two crates in this project:
 * `sdl` - The raytracer's proprietary scene description language, loosely inspired by POV-Ray's. This crate has its own tokenizer, AST, and interpreter for parsing SDL files.
 * `sdl_lua` - An SDL runtime that uses Lua to describe a scene. This crate is only included for completeness; it is not in a functional state.
 
+For more information on the SDL (scene description language), please visit [its README](/sdl/README.md).
+
 ## Things to research
 
 Since the goal of this raytracer is to be fast, here are some things I want to research more on:
