@@ -196,7 +196,7 @@ mesh {
     position: <0, -0.5, 0>,
     scale: random(0.5, 1.5),
     material: {
-        texture: image("assets/Handle1Tex.png"),
+        texture: image("assets/fedora.png"),
     }
 }
 
