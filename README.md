@@ -152,39 +152,46 @@ At this point, the SDL is in a usable state. It can successfully describe and re
 scene:
 
 ```
+# This is a test scene.
+
 camera {
+    # Render the image as 1920x1080.
     vw: 1920,
     vh: 1080,
+
     fov: 60,
-    origin: <0, 0.8, 0>,
-    pitch: -0.1,
+    origin: <-3, 3, 0>,
+    pitch: -0.5,
+    yaw: 0.4,
 }
 
+# We just need one sun light.
 sun {
     vector: <-0.8, -1, -0.3>,
     intensity: 0.8,
     specular_power: 64,
 }
 
-sphere {
-    position: <0, 0, -5>,
-    radius: 1,
+# This is the main UWL cube in the front.
+aabb {
+    position: vec(random(-1, 1), random(0, 1), random(-9, -7)),
+    size: <1, 1, 1>,
     material: {
-        texture: solid(color(200, 200, 200)),
-        reflectiveness: 0.6,
+        texture: image("assets/uwl.png"),
     }
 }
 
+# This cube is reflective, to the right of the cube.
 sphere {
     position: <2.5, 0, -5>,
     radius: 1,
     material: {
         texture: solid(color(200, 200, 200)),
-        reflectiveness: 0.6,
-        transparency: 0.6,
+        reflectiveness: 0.7,
     }
 }
 
+# This cube is solid opaque, to the left of the cube.
 sphere {
     position: <-2.5, 0, -5>,
     radius: 1,
@@ -193,17 +200,30 @@ sphere {
     }
 }
 
+# This is a wall behind all of the objects.
 aabb {
-    position: <0, 0, -12>,
-    size: <10, 1, 0.2>,
+    position: <0, 2, -12>,
+    size: <10, 3, 1>,
 }
 
+# Finally, a checkered ground plate.
 plane {
     origin: <0, -1, 0>,
     material: {
         texture: checkerboard(color(128, 128, 128), color(255, 255, 255)),
     }
 }
+
+point_light {
+    position: <0, 0, -3.5>,
+    color: color(255, 100, 100),
+    intensity: 2,
+}
+
 ```
+
+The SDL is capable of functions like `sin(x)`, `cos(x)`, `normalize(vector)`, `add(vector, vector)`,
+`mul(x, y)`, and so on. You can safely nest functions, add comments with `#`, add any number of objects,
+add image textures, and more. This is all done in the `sdl` crate.
 
 ![Progress screenshot from 10/7/2021](/images/readme/10_7_2021.png)
