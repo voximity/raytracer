@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::fs::File;
+use std::{fs::File, time::Instant};
 
 use clap::{App, Arg};
 
@@ -32,9 +32,14 @@ fn main() {
         )
         .get_matches();
 
+    let now = Instant::now();
     let scene = Interpreter::new(File::open(matches.value_of("SOURCE").unwrap()).unwrap())
         .unwrap()
         .run()
         .unwrap();
+
+    println!("Scene constructed in {}s", now.elapsed().as_secs_f32());
+    
     scene.render_to(matches.value_of("output").unwrap(), image::ImageFormat::Png);
+    println!("Operation complete in in {}s", now.elapsed().as_secs_f32());
 }
