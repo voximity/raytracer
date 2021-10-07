@@ -15,9 +15,6 @@ pub enum TokenizeError {
 
     #[error("error parsing number")]
     NumberParseError,
-
-    #[error("wrong character, expected another")]
-    WrongCharacter { expected: char, got: char },
 }
 
 /// An operator.
@@ -272,27 +269,9 @@ impl<R: Read + Seek> Tokenizer<R> {
         self.reader.read_exact(&mut byte).map(|_| byte[0] as char)
     }
 
-    /// Reads the next character, expecting it to be one.
-    fn next_expecting(&mut self, expecting: char) -> Result<(), TokenizeError> {
-        let next = self.next()?;
-        if next != expecting {
-            Err(TokenizeError::WrongCharacter {
-                expected: expecting,
-                got: next,
-            })
-        } else {
-            Ok(())
-        }
-    }
-
     /// Skips the next character in the reader.
     fn skip(&mut self) -> Result<(), io::Error> {
         self.reader.seek(SeekFrom::Current(1)).map(|_| ())
-    }
-
-    /// Skips until there is no more whitespace.
-    fn skip_whitespace(&mut self) -> Result<(), io::Error> {
-        self.read_while(char::is_whitespace).map(|_| ())
     }
 
     /// Goes back to the last character in the reader.

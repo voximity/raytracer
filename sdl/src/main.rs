@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{fs::File, time::Instant};
 
 use clap::{App, Arg};
@@ -8,7 +6,6 @@ use crate::interpret::Interpreter;
 
 mod ast;
 mod interpret;
-mod reader;
 mod tokenize;
 
 fn main() {

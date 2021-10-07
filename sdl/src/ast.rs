@@ -54,6 +54,7 @@ pub enum Node {
 /// A kind of node *value*, rather than just any node. Used to allow functions to specify
 /// their parameter types.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum NodeKind {
     Dictionary,
     String,

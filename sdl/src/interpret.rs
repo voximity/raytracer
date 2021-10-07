@@ -39,9 +39,6 @@ pub enum InterpretError {
     #[error("materials object must be a dictionary")]
     InvalidMaterials,
 
-    #[error("property was expected to be {0}, is actually {1}")]
-    PropertyTypeMismatch(&'static str, String),
-
     #[error("invalid args to function call")]
     InvalidCallArgs,
 
@@ -180,7 +177,7 @@ impl Interpreter {
                             if position != Vector3::default() {
                                 mesh.shift(position);
                             }
-                            
+
                             if scale != 0. {
                                 mesh.scale(scale);
                             }
