@@ -145,3 +145,65 @@ aabb {
   }
 }
 ```
+
+#### 10/7/2021
+
+At this point, the SDL is in a usable state. It can successfully describe and render the following
+scene:
+
+```
+camera {
+    vw: 1920,
+    vh: 1080,
+    fov: 60,
+    origin: <0, 0.8, 0>,
+    pitch: -0.1,
+}
+
+sun {
+    vector: <-0.8, -1, -0.3>,
+    intensity: 0.8,
+    specular_power: 64,
+}
+
+sphere {
+    position: <0, 0, -5>,
+    radius: 1,
+    material: {
+        texture: solid(color(200, 200, 200)),
+        reflectiveness: 0.6,
+    }
+}
+
+sphere {
+    position: <2.5, 0, -5>,
+    radius: 1,
+    material: {
+        texture: solid(color(200, 200, 200)),
+        reflectiveness: 0.6,
+        transparency: 0.6,
+    }
+}
+
+sphere {
+    position: <-2.5, 0, -5>,
+    radius: 1,
+    material: {
+        texture: solid(color(200, 200, 200)),
+    }
+}
+
+aabb {
+    position: <0, 0, -12>,
+    size: <10, 1, 0.2>,
+}
+
+plane {
+    origin: <0, -1, 0>,
+    material: {
+        texture: checkerboard(color(128, 128, 128), color(255, 255, 255)),
+    }
+}
+```
+
+![Progress screenshot from 10/7/2021](/images/readme/10_7_2021.png)
