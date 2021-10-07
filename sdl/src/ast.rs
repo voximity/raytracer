@@ -1,6 +1,6 @@
 use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
-use raytracer::math::Vector3;
+use raytracer::{material::Color, math::Vector3};
 use thiserror::Error;
 
 use crate::tokenize::{Op, Sep, Token};
@@ -43,6 +43,12 @@ pub enum Node {
 
     /// A vector.
     Vector(Vector3),
+
+    /// A color. This is really just a Call("color", vec![R, G, B]).
+    Color(Color),
+
+    /// A boolean.
+    Boolean(bool),
 }
 
 /// An AST parser, which takes in a list of tokens from the tokenizer.
@@ -83,18 +89,23 @@ impl AstParser {
                 if let Some(Token::Sep(Sep::ParensOpen)) = self.tokens.peek() {
                     self.tokens.next();
 
-                    Ok(Node::Call(
-                        ident,
-                        self.read_list(
-                            Self::parse_value,
-                            |s| s.read_sep(Sep::Comma),
-                            Token::Sep(Sep::ParensClose),
-                        )?,
-                    ))
+                    let params = self.read_list(
+                        Self::parse_value,
+                        |s| s.read_sep(Sep::Comma),
+                        Token::Sep(Sep::ParensClose),
+                    )?;
+
+                    Ok(match (ident.as_str(), &params[..]) {
+                        ("color", &[Node::Number(r), Node::Number(g), Node::Number(b)]) => {
+                            Node::Color(Color::new(r as u8, g as u8, b as u8))
+                        }
+                        _ => Node::Call(ident, params),
+                    })
                 } else {
                     Ok(Node::Identifier(ident))
                 }
             }
+            Token::Boolean(bool) => Ok(Node::Boolean(bool)),
             Token::String(str) => Ok(Node::String(str)),
             Token::Number(num) => Ok(Node::Number(num)),
             Token::Op(Op::Lt) => Ok(self.read_vector()?),
@@ -111,7 +122,7 @@ impl AstParser {
     ///     position: <1, 2, 3>,
     ///     radius: 4,
     ///     material: {
-    ///         color: <random(0, 1), random(0, 1), random(0, 1)>,
+    ///         texture: solid(color(random(0, 1), random(0, 1), random(0, 1))),
     ///         reflectiveness: 0.4,
     ///     },
     /// }

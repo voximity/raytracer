@@ -56,6 +56,9 @@ pub enum Token {
 
     /// A number. Decimals optional.
     Number(f64),
+
+    /// A boolean.
+    Boolean(bool),
 }
 
 impl Display for Token {
@@ -76,6 +79,7 @@ impl Display for Token {
             Self::Identifier(ident) => write!(f, "{}", ident),
             Self::String(str) => write!(f, "\"{}\"", str),
             Self::Number(num) => write!(f, "{}", num),
+            Self::Boolean(bool) => write!(f, "{}", if *bool { "true" } else { "false" }),
         }
     }
 }
@@ -111,7 +115,18 @@ impl<R: Read + Seek> Tokenizer<R> {
                 _ if c.is_whitespace() => self.skip()?,
 
                 // alphabetical characters: identifier
-                'A'..='Z' | 'a'..='z' => tokens.push(Token::Identifier(self.read_identifier()?)),
+                'A'..='Z' | 'a'..='z' => {
+                    let ident = self.read_identifier()?;
+
+                    match ident.as_str() {
+                        // handle keywords
+                        "true" | "yes" => tokens.push(Token::Boolean(true)),
+                        "false" | "no" => tokens.push(Token::Boolean(false)),
+
+                        // otherwise, this is a normal identifier
+                        _ => tokens.push(Token::Identifier(ident)),
+                    }
+                }
 
                 // a quote: string
                 '"' => tokens.push(Token::String(self.read_string()?)),
@@ -170,7 +185,7 @@ impl<R: Read + Seek> Tokenizer<R> {
     /// Read an identifier, which is just an alphanumeric bit of text.
     fn read_identifier(&mut self) -> Result<String, TokenizeError> {
         Ok(self
-            .read_while(char::is_alphanumeric)?
+            .read_while(|c| c.is_alphanumeric() || c == '_')?
             .into_iter()
             .collect())
     }

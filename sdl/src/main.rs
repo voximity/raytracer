@@ -2,9 +2,7 @@
 
 use std::fs::File;
 
-use ast::AstParser;
 use clap::{App, Arg};
-use tokenize::Tokenizer;
 
 use crate::interpret::Interpreter;
 
@@ -34,6 +32,9 @@ fn main() {
         )
         .get_matches();
 
-    let scene = Interpreter::new(File::open(matches.value_of("SOURCE").unwrap()).unwrap()).unwrap().run().unwrap();
+    let scene = Interpreter::new(File::open(matches.value_of("SOURCE").unwrap()).unwrap())
+        .unwrap()
+        .run()
+        .unwrap();
     scene.render_to(matches.value_of("output").unwrap(), image::ImageFormat::Png);
 }
