@@ -20,22 +20,28 @@ pub enum TokenizeError {
     WrongCharacter { expected: char, got: char },
 }
 
+/// An operator.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     Lt,
     Gt,
 }
 
+/// A separator.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Sep {
+    Comma,
+    Colon,
+    BraceOpen,
+    BraceClose,
+    ParensOpen,
+    ParensClose,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    /// A comma. Usually delimits a list of things.
-    Comma,
-
-    /// A colon. Usually indicates a dictionary key-value.
-    Colon,
-
-    /// An opening or closing brace. `true` if opening, `false` if closing.
-    Brace(bool),
+    /// A separator.
+    Sep(Sep),
 
     /// An operator.
     Op(Op),
@@ -53,17 +59,32 @@ pub enum Token {
 impl Display for Token {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Comma => write!(f, ","),
-            Self::Colon => write!(f, ":"),
-            Self::Brace(opening) => write!(f, "{}", if *opening { "{" } else { "}" }),
-            Self::Op(op) => match op {
-                Op::Lt => write!(f, "<"),
-                Op::Gt => write!(f, ">"),
-            },
+            Self::Sep(Sep::Comma) => write!(f, ","),
+            Self::Sep(Sep::Colon) => write!(f, ":"),
+            Self::Sep(Sep::BraceOpen) => write!(f, "{{"),
+            Self::Sep(Sep::BraceClose) => write!(f, "}}"),
+            Self::Sep(Sep::ParensOpen) => write!(f, "("),
+            Self::Sep(Sep::ParensClose) => write!(f, ")"),
+
+            Self::Op(Op::Lt) => write!(f, "<"),
+            Self::Op(Op::Gt) => write!(f, ">"),
+
             Self::Identifier(ident) => write!(f, "{}", ident),
             Self::String(str) => write!(f, "\"{}\"", str),
             Self::Number(num) => write!(f, "{}", num),
         }
+    }
+}
+
+impl From<Op> for Token {
+    fn from(op: Op) -> Self {
+        Self::Op(op)
+    }
+}
+
+impl From<Sep> for Token {
+    fn from(sep: Sep) -> Self {
+        Self::Sep(sep)
     }
 }
 
@@ -102,19 +123,27 @@ impl<R: Read + Seek> Tokenizer<R> {
                     self.skip()?;
                 }
                 ',' => {
-                    tokens.push(Token::Comma);
+                    tokens.push(Sep::Comma.into());
                     self.skip()?;
                 }
                 '{' => {
-                    tokens.push(Token::Brace(true));
+                    tokens.push(Sep::BraceOpen.into());
                     self.skip()?;
                 }
                 '}' => {
-                    tokens.push(Token::Brace(false));
+                    tokens.push(Sep::BraceClose.into());
+                    self.skip()?;
+                }
+                '(' => {
+                    tokens.push(Sep::ParensOpen.into());
+                    self.skip()?;
+                }
+                ')' => {
+                    tokens.push(Sep::ParensClose.into());
                     self.skip()?;
                 }
                 ':' => {
-                    tokens.push(Token::Colon);
+                    tokens.push(Sep::Colon.into());
                     self.skip()?;
                 }
 

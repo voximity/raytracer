@@ -1,9 +1,9 @@
-use std::{collections::HashMap, vec::IntoIter};
+use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use raytracer::math::Vector3;
 use thiserror::Error;
 
-use crate::tokenize::{Op, Token};
+use crate::tokenize::{Op, Sep, Token};
 
 #[derive(Debug, Error)]
 pub enum AstError {
@@ -28,6 +28,9 @@ pub enum Node {
     /// A dictionary. It acts as a map whose keys are identifiers and whose values are more AST nodes.
     Dictionary(HashMap<String, Node>),
 
+    /// A function call, including a list of its parameters.
+    Call(String, Vec<Node>),
+
     /// An identifier.
     Identifier(String),
 
@@ -43,7 +46,7 @@ pub enum Node {
 
 #[derive(Debug)]
 pub struct AstParser {
-    tokens: IntoIter<Token>,
+    tokens: Peekable<IntoIter<Token>>,
 }
 
 impl AstParser {
@@ -52,7 +55,7 @@ impl AstParser {
 
     pub fn new(tokens: Vec<Token>) -> Self {
         Self {
-            tokens: tokens.into_iter(),
+            tokens: tokens.into_iter().peekable(),
         }
     }
 
@@ -71,11 +74,26 @@ impl AstParser {
 
     fn parse_value(&mut self) -> Result<Node, AstError> {
         match self.next()? {
-            Token::Identifier(ident) => Ok(Node::Identifier(ident)),
+            Token::Identifier(ident) => {
+                if let Some(Token::Sep(Sep::ParensOpen)) = self.tokens.peek() {
+                    self.tokens.next();
+
+                    Ok(Node::Call(
+                        ident,
+                        self.read_list(
+                            Self::parse_value,
+                            |s| s.read_sep(Sep::Comma),
+                            Token::Sep(Sep::ParensClose),
+                        )?,
+                    ))
+                } else {
+                    Ok(Node::Identifier(ident))
+                }
+            }
             Token::String(str) => Ok(Node::String(str)),
             Token::Number(num) => Ok(Node::Number(num)),
             Token::Op(Op::Lt) => Ok(self.read_vector()?),
-            Token::Brace(true) => Ok(self.read_dict()?),
+            Token::Sep(Sep::BraceOpen) => Ok(self.read_dict()?),
             t => Err(AstError::UnexpectedToken("a value".into(), t)),
         }
     }
@@ -84,7 +102,7 @@ impl AstParser {
         // the identifier has already been read
 
         // read the opening brace
-        self.read_expecting(Token::Brace(true))?;
+        self.read_sep(Sep::BraceOpen)?;
 
         // read the properties
         let props = self.read_dict()?;
@@ -101,25 +119,25 @@ impl AstParser {
     fn read_dict(&mut self) -> Result<Node, AstError> {
         // we assume the opening brace has already been read
 
-        let mut dict = vec![];
+        let dict = self.read_list(
+            |s| {
+                let key = match s.next()? {
+                    Token::Identifier(ident) => ident,
+                    t => {
+                        return Err(AstError::UnexpectedToken(
+                            "a key-value or closing brace".into(),
+                            t,
+                        ))
+                    }
+                };
 
-        loop {
-            match self.next()? {
-                Token::Identifier(key) => {
-                    self.read_expecting(Token::Colon)?;
-                    let value = self.parse_value()?;
-                    dict.push((key, value));
-                    self.read_expecting(Token::Comma)?;
-                }
-                Token::Brace(false) => break,
-                t => {
-                    return Err(AstError::UnexpectedToken(
-                        "a key: value or closing brace".into(),
-                        t,
-                    ))
-                }
-            }
-        }
+                s.read_sep(Sep::Colon)?;
+
+                Ok((key, s.parse_value()?))
+            },
+            |s| s.read_sep(Sep::Comma),
+            Token::Sep(Sep::BraceClose),
+        )?;
 
         Ok(Node::Dictionary(dict.into_iter().collect()))
     }
@@ -133,9 +151,9 @@ impl AstParser {
         }
 
         let x = read_num(self)?;
-        self.read_expecting(Token::Comma)?;
+        self.read_sep(Sep::Comma)?;
         let y = read_num(self)?;
-        self.read_expecting(Token::Comma)?;
+        self.read_sep(Sep::Comma)?;
         let z = read_num(self)?;
         self.read_expecting(Token::Op(Op::Gt))?;
 
@@ -149,6 +167,49 @@ impl AstParser {
         } else {
             Err(AstError::UnexpectedToken(format!("{}", token), got.clone()))
         }
+    }
+
+    fn read_sep(&mut self, sep: Sep) -> Result<(), AstError> {
+        self.read_expecting(Token::Sep(sep))
+    }
+
+    fn read_list<I, D, T>(
+        &mut self,
+        item: I,
+        delimiter: D,
+        close_token: Token,
+    ) -> Result<Vec<T>, AstError>
+    where
+        I: Fn(&mut Self) -> Result<T, AstError>,
+        D: Fn(&mut Self) -> Result<(), AstError>,
+    {
+        let mut v = Vec::new();
+
+        loop {
+            // if we hit the close token, stop the loop early
+            if let Some(t) = self.tokens.peek() {
+                if t == &close_token {
+                    self.next()?;
+                    break;
+                }
+            }
+
+            // continuously scan for more items
+            v.push(item(self)?);
+
+            // if we hit the close token, stop the loop, just like before
+            if let Some(t) = self.tokens.peek() {
+                if t == &close_token {
+                    self.next()?;
+                    break;
+                }
+            }
+
+            // if the next token wasn't the close token, expect the delimiter
+            delimiter(self)?;
+        }
+
+        Ok(v)
     }
 
     fn next(&mut self) -> Result<Token, AstError> {
