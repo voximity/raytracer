@@ -5,6 +5,7 @@ use thiserror::Error;
 
 use crate::tokenize::{Op, Sep, Token};
 
+/// An error while parsing to the AST.
 #[derive(Debug, Error)]
 pub enum AstError {
     #[error("expected '{0}', got '{1:?}'")]
@@ -44,6 +45,7 @@ pub enum Node {
     Vector(Vector3),
 }
 
+/// An AST parser, which takes in a list of tokens from the tokenizer.
 #[derive(Debug)]
 pub struct AstParser {
     tokens: Peekable<IntoIter<Token>>,
@@ -53,12 +55,14 @@ impl AstParser {
     // for now, we will just assume that all identifiers on the root node are objects
     // after all, the only other thing they could be is keywords
 
+    /// Construct a new AST parser from a list of tokens from the tokenizer.
     pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             tokens: tokens.into_iter().peekable(),
         }
     }
 
+    /// Parse the root node, that is, the global scope.
     pub fn parse_root(mut self) -> Result<Node, AstError> {
         let mut nodes = vec![];
 
@@ -72,6 +76,7 @@ impl AstParser {
         Ok(Node::Root(nodes))
     }
 
+    /// Parse any "value": effectively an expression that has some value.
     fn parse_value(&mut self) -> Result<Node, AstError> {
         match self.next()? {
             Token::Identifier(ident) => {
@@ -98,6 +103,19 @@ impl AstParser {
         }
     }
 
+    /// Read a scene object.
+    /// 
+    /// An example scene object:
+    /// ```
+    /// sphere {
+    ///     position: <1, 2, 3>,
+    ///     radius: 4,
+    ///     material: {
+    ///         color: <random(0, 1), random(0, 1), random(0, 1)>,
+    ///         reflectiveness: 0.4,
+    ///     },
+    /// }
+    /// ```
     fn read_object(&mut self, identifier: String) -> Result<Node, AstError> {
         // the identifier has already been read
 
@@ -116,6 +134,18 @@ impl AstParser {
         })
     }
 
+    /// Read a dictionary.
+    /// 
+    /// An example dictionary:
+    /// ```
+    /// {
+    ///     key: value,
+    ///     key: "value",
+    ///     someOtherKey: value(),
+    ///     nested: {
+    ///         a: "you can nest dictionaries!"
+    ///     }
+    /// }
     fn read_dict(&mut self) -> Result<Node, AstError> {
         // we assume the opening brace has already been read
 
@@ -142,6 +172,12 @@ impl AstParser {
         Ok(Node::Dictionary(dict.into_iter().collect()))
     }
 
+    /// Read a vector.
+    /// 
+    /// An example vector:
+    /// ```
+    /// <1.1, 2.4, 6.7>
+    /// ```
     fn read_vector(&mut self) -> Result<Node, AstError> {
         fn read_num(me: &mut AstParser) -> Result<f64, AstError> {
             match me.next()? {
@@ -160,6 +196,8 @@ impl AstParser {
         Ok(Node::Vector(Vector3::new(x, y, z)))
     }
 
+    /// Read from the token stream, expecting a token.
+    /// Errors with `AstError::UnexpectedToken` if any other token is received.
     fn read_expecting(&mut self, token: Token) -> Result<(), AstError> {
         let got = self.next()?;
         if got == token {
@@ -169,10 +207,15 @@ impl AstParser {
         }
     }
 
+    /// Read from the token stream, expecting a certain `Sep`arator.
     fn read_sep(&mut self, sep: Sep) -> Result<(), AstError> {
         self.read_expecting(Token::Sep(sep))
     }
 
+    /// Read a list of parsable things from closure `item: I`, delimited by closure `delimiter: D`,
+    /// or closed by list closer token `close_token`.
+    /// 
+    /// For example, a list of values can simply be read with `read_list(Self::read_value, |s| s.read_sep(Sep::Comma), Token::Sep(Sep::ParensClose))`.
     fn read_list<I, D, T>(
         &mut self,
         item: I,
@@ -212,6 +255,7 @@ impl AstParser {
         Ok(v)
     }
 
+    /// Advance the token stream, or error with `AstError::UnexpectedEof`.
     fn next(&mut self) -> Result<Token, AstError> {
         self.tokens.next().ok_or(AstError::UnexpectedEof)
     }

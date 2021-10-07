@@ -97,6 +97,7 @@ impl<R: Read + Seek> Tokenizer<R> {
         Tokenizer { reader }
     }
 
+    /// Tokenize from the reader, converting to a `Result<Vec<Token>, TokenizeError>`.
     pub fn tokenize(mut self) -> Result<Vec<Token>, TokenizeError> {
         let mut tokens = vec![];
 
