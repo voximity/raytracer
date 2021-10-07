@@ -168,6 +168,26 @@ impl Interpreter {
                                 .objects
                                 .push(Box::new(object::Aabb::new(pos, size, material)));
                         }
+                        "mesh" => {
+                            let obj = required_property!(self, properties, "obj", String);
+                            let position = optional_property!(self, properties, "position", Vector).unwrap_or_else(|| Vector3::default());
+                            let scale = optional_property!(self, properties, "scale", Number).unwrap_or(1.);
+                            let material = self.read_material(properties)?;
+
+                            let mut mesh = object::Mesh::from_obj(obj, material);
+                            mesh.center();
+
+                            if position != Vector3::default() {
+                                mesh.shift(position);
+                            }
+                            
+                            if scale != 0. {
+                                mesh.scale(scale);
+                            }
+
+                            mesh.recalculate();
+                            self.scene.objects.push(Box::new(mesh));
+                        }
                         "plane" => {
                             let origin = required_property!(self, properties, "origin", Vector);
                             let normal = optional_property!(self, properties, "normal", Vector)

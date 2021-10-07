@@ -1,0 +1,28 @@
+camera {
+    vw: 1920,
+    vh: 1080,
+    origin: <1.5, 0.6, 3>,
+    yaw: -0.5,
+    pitch: -0.3,
+}
+
+sun {
+    vector: <-0.8, -1, -0.3>,
+    intensity: 0.8,
+    specular_power: 64,
+}
+
+mesh {
+    obj: "assets/fedora.obj",
+    position: <0, -0.5, 0>,
+    material: {
+        texture: image("assets/Handle1Tex.png"),
+    }
+}
+
+plane {
+    origin: <0, -1, 0>,
+    material: {
+        reflectiveness: 0.6,
+    }
+}

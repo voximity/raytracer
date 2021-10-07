@@ -1,9 +1,4 @@
-use crate::{
-    acceleration,
-    material::Material,
-    math::{Ray, Vector3},
-    scene::EPSILON,
-};
+use crate::{acceleration, material::Material, math::{Ray, VECTOR_MAX, VECTOR_MIN, Vector3}, scene::EPSILON};
 
 use super::{AabbIntersector, Hit, Intersect, SceneObject};
 
@@ -266,6 +261,25 @@ impl Mesh {
             texcoords,
             normals,
         }
+    }
+
+    /// Centers the mesh so that its bounding box center is at the origin.
+    pub fn center(&mut self) {
+        let mut min = VECTOR_MAX;
+        let mut max = VECTOR_MIN;
+
+        for tri in self.triangles.iter() {
+            for v in tri.v {
+                min.x = min.x.min(v.x);
+                min.y = min.y.min(v.y);
+                min.z = min.z.min(v.z);
+                max.x = max.x.max(v.x);
+                max.y = max.y.max(v.y);
+                max.z = max.z.max(v.z);
+            }
+        }
+
+        self.shift((min + max) * -0.5);
     }
 
     pub fn shift(&mut self, delta: Vector3) {
