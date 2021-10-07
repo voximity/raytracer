@@ -1,8 +1,10 @@
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     io::{Read, Seek},
 };
 
+use image::{ImageBuffer, Rgb};
+use rand::Rng;
 use raytracer::{
     lighting,
     material::{Color, Material, Texture},
@@ -42,40 +44,44 @@ pub enum InterpretError {
 
     #[error("invalid args to function call")]
     InvalidCallArgs,
+
+    #[error("expected {0} args, got {1}")]
+    InvalidArgCount(usize, usize),
+
+    #[error("generic image error {0}")]
+    ImageError(#[from] image::ImageError),
+
+    #[error("no function by the name {0}")]
+    UnknownFunction(String),
+}
+
+macro_rules! optional_property {
+    ($self:ident, $properties:ident, $name:literal, $k:ident) => {
+        $self
+            .optional_property(&mut $properties, $name, ast::NodeKind::$k)?
+            .map(|v| unwrap_variant!(v, ast::Node::$k))
+    };
 }
 
 macro_rules! required_property {
-    ($properties:ident, $name:literal, $variant:path) => {
-        match $properties.get($name) {
-            Some($variant(value)) => value,
+    ($self:ident, $properties:ident, $name:literal, $k:ident) => {
+        match optional_property!($self, $properties, $name, $k) {
+            Some(a) => a,
             _ => return Err(InterpretError::RequiredPropertyMissing($name)),
         }
     };
 }
 
-macro_rules! optional_property {
-    ($properties:ident, $name:literal, $variant:path) => {
-        match $properties.get($name) {
-            Some($variant(value)) => Some(value),
-            Some(n) => {
-                return Err(InterpretError::PropertyTypeMismatch(
-                    stringify!($variant),
-                    format!("{:?}", n),
-                ))
-            }
-            _ => None,
+macro_rules! unwrap_variant {
+    ($matching:expr, $variant:path) => {
+        match $matching {
+            $variant(a) => a,
+            _ => panic!("unwrapped variant {}", stringify!($variant)),
         }
     };
 }
 
-macro_rules! deconstruct_args {
-    ($args:ident, $($v:path: $a:ident),+$(,)?) => {
-        match &$args[..] {
-            &[$($v($a)),+] => ($($a),+),
-            _ => return Err(InterpretError::InvalidCallArgs),
-        }
-    }
-}
+type ImageCache = HashMap<String, ImageBuffer<Rgb<u8>, Vec<u8>>>;
 
 /// The interpreter is the general runtime for the SDL interpreter. It is responsible for storing
 /// AST data, scene data, and interpreting the AST at scene construction time to develop the
@@ -83,6 +89,7 @@ macro_rules! deconstruct_args {
 pub struct Interpreter {
     root: ast::Node,
     scene: Scene,
+    images: ImageCache,
 }
 
 impl Interpreter {
@@ -93,6 +100,7 @@ impl Interpreter {
         Ok(Interpreter {
             root: AstParser::new(Tokenizer::new(reader).tokenize()?).parse_root()?,
             scene: Scene::default(),
+            images: HashMap::new(),
         })
     }
 
@@ -103,6 +111,8 @@ impl Interpreter {
             _ => unreachable!(),
         };
 
+        self.root = ast::Node::Root(vec![]);
+
         // check for duplicate camera objects
         let mut object_names: Vec<String> = Vec::new();
 
@@ -110,7 +120,7 @@ impl Interpreter {
             match node {
                 ast::Node::Object {
                     name,
-                    ref properties,
+                    mut properties,
                 } => {
                     match name.as_str() {
                         // one-time scene properties
@@ -119,19 +129,14 @@ impl Interpreter {
                                 return Err(InterpretError::NonUniqueObject("camera"));
                             }
 
-                            let vw = optional_property!(properties, "vw", ast::Node::Number)
-                                .map(|&f| f as i32);
-                            let vh = optional_property!(properties, "vh", ast::Node::Number)
-                                .map(|&f| f as i32);
-                            let origin =
-                                optional_property!(properties, "origin", ast::Node::Vector)
-                                    .copied();
-                            let yaw =
-                                optional_property!(properties, "yaw", ast::Node::Number).copied();
-                            let pitch =
-                                optional_property!(properties, "pitch", ast::Node::Number).copied();
-                            let fov =
-                                optional_property!(properties, "fov", ast::Node::Number).copied();
+                            let vw = optional_property!(self, properties, "vw", Number)
+                                .map(|f| f as i32);
+                            let vh = optional_property!(self, properties, "vh", Number)
+                                .map(|f| f as i32);
+                            let origin = optional_property!(self, properties, "origin", Vector);
+                            let yaw = optional_property!(self, properties, "yaw", Number);
+                            let pitch = optional_property!(self, properties, "pitch", Number);
+                            let fov = optional_property!(self, properties, "fov", Number);
 
                             if let Some(vw) = vw {
                                 self.scene.camera.vw = vw;
@@ -155,27 +160,23 @@ impl Interpreter {
 
                         // objects
                         "aabb" => {
-                            let pos = required_property!(properties, "position", ast::Node::Vector);
-                            let size = required_property!(properties, "size", ast::Node::Vector);
-                            let material = Self::read_material(properties)?;
+                            let pos = required_property!(self, properties, "position", Vector);
+                            let size = required_property!(self, properties, "size", Vector);
+                            let material = self.read_material(properties)?;
 
                             self.scene
                                 .objects
-                                .push(Box::new(object::Aabb::new(*pos, *size, material)));
+                                .push(Box::new(object::Aabb::new(pos, size, material)));
                         }
                         "plane" => {
-                            let origin =
-                                *required_property!(properties, "origin", ast::Node::Vector);
-                            let normal =
-                                optional_property!(properties, "normal", ast::Node::Vector)
-                                    .map(|&v| v)
-                                    .unwrap_or_else(|| Vector3::new(0., 1., 0.))
-                                    .normalize();
-                            let material = Self::read_material(properties)?;
-                            let uv_wrap =
-                                optional_property!(properties, "uv_wrap", ast::Node::Number)
-                                    .map(|&f| f as f32)
-                                    .unwrap_or(1.);
+                            let origin = required_property!(self, properties, "origin", Vector);
+                            let normal = optional_property!(self, properties, "normal", Vector)
+                                .unwrap_or_else(|| Vector3::new(0., 1., 0.))
+                                .normalize();
+                            let uv_wrap = optional_property!(self, properties, "uv_wrap", Number)
+                                .map(|f| f as f32)
+                                .unwrap_or(1.);
+                            let material = self.read_material(properties)?;
 
                             self.scene.objects.push(Box::new(object::Plane {
                                 origin,
@@ -185,39 +186,30 @@ impl Interpreter {
                             }));
                         }
                         "sphere" => {
-                            let pos = required_property!(properties, "position", ast::Node::Vector);
-                            let radius =
-                                required_property!(properties, "radius", ast::Node::Number);
-                            let material = Self::read_material(properties)?;
+                            let pos = required_property!(self, properties, "position", Vector);
+                            let radius = required_property!(self, properties, "radius", Number);
+                            let material = self.read_material(properties)?;
 
                             self.scene
                                 .objects
-                                .push(Box::new(object::Sphere::new(*pos, *radius, material)));
+                                .push(Box::new(object::Sphere::new(pos, radius, material)));
                         }
 
                         // lights
-                        "point" => {
+                        "point_light" | "pointlight" => {
                             let default = lighting::Point::default();
 
-                            let color =
-                                optional_property!(properties, "color", ast::Node::Color).copied();
+                            let color = optional_property!(self, properties, "color", Color);
                             let intensity =
-                                optional_property!(properties, "intensity", ast::Node::Number)
-                                    .copied();
+                                optional_property!(self, properties, "intensity", Number);
                             let specular_power =
-                                optional_property!(properties, "specular_power", ast::Node::Number)
-                                    .map(|&f| f as i32);
-                            let specular_strength = optional_property!(
-                                properties,
-                                "specular_strength",
-                                ast::Node::Number
-                            )
-                            .copied();
-                            let position =
-                                *required_property!(properties, "position", ast::Node::Vector);
+                                optional_property!(self, properties, "specular_power", Number)
+                                    .map(|f| f as i32);
+                            let specular_strength =
+                                optional_property!(self, properties, "specular_strength", Number);
+                            let position = required_property!(self, properties, "position", Vector);
                             let max_distance =
-                                optional_property!(properties, "max_distance", ast::Node::Number)
-                                    .copied();
+                                optional_property!(self, properties, "max_distance", Number);
 
                             let light = lighting::Point {
                                 color: color.unwrap_or(default.color),
@@ -231,35 +223,22 @@ impl Interpreter {
 
                             self.scene.lights.push(Box::new(light));
                         }
-                        "sun" => {
+                        "sun" | "sun_light" | "sunlight" => {
                             let default = lighting::Sun::default();
 
-                            let color =
-                                optional_property!(properties, "color", ast::Node::Color).copied();
+                            let color = optional_property!(self, properties, "color", Color);
                             let intensity =
-                                optional_property!(properties, "intensity", ast::Node::Number)
-                                    .copied();
+                                optional_property!(self, properties, "intensity", Number);
                             let specular_power =
-                                optional_property!(properties, "specular_power", ast::Node::Number)
-                                    .map(|&f| f as i32);
-                            let specular_strength = optional_property!(
-                                properties,
-                                "specular_strength",
-                                ast::Node::Number
-                            )
-                            .copied();
+                                optional_property!(self, properties, "specular_power", Number)
+                                    .map(|f| f as i32);
+                            let specular_strength =
+                                optional_property!(self, properties, "specular_strength", Number);
                             let vector =
-                                required_property!(properties, "vector", ast::Node::Vector)
-                                    .normalize();
-                            let shadows =
-                                optional_property!(properties, "shadows", ast::Node::Boolean)
-                                    .copied();
-                            let shadow_coefficient = optional_property!(
-                                properties,
-                                "shadow_coefficient",
-                                ast::Node::Number
-                            )
-                            .copied();
+                                required_property!(self, properties, "vector", Vector).normalize();
+                            let shadows = optional_property!(self, properties, "shadows", Boolean);
+                            let shadow_coefficient =
+                                optional_property!(self, properties, "shadow_coefficient", Number);
 
                             let light = lighting::Sun {
                                 color: color.unwrap_or(default.color),
@@ -275,10 +254,10 @@ impl Interpreter {
 
                             self.scene.lights.push(Box::new(light));
                         }
-                        _ => return Err(InterpretError::UnknownObject(name)),
+                        _ => return Err(InterpretError::UnknownObject(name.clone())),
                     }
 
-                    object_names.push(name);
+                    object_names.push(name.clone());
                 }
                 _ => (),
             }
@@ -288,17 +267,20 @@ impl Interpreter {
     }
 
     /// Read a material from a dictionary node.
-    fn read_material(properties: &HashMap<String, ast::Node>) -> Result<Material, InterpretError> {
-        match properties.get("material") {
-            Some(ast::Node::Dictionary(map)) => {
+    fn read_material(
+        &mut self,
+        mut properties: HashMap<String, ast::Node>,
+    ) -> Result<Material, InterpretError> {
+        match properties.remove("material") {
+            Some(ast::Node::Dictionary(mut map)) => {
                 let reflectiveness =
-                    *optional_property!(map, "reflectiveness", ast::Node::Number).unwrap_or(&0.);
+                    optional_property!(self, map, "reflectiveness", Number).unwrap_or(0.);
                 let transparency =
-                    *optional_property!(map, "transparency", ast::Node::Number).unwrap_or(&0.);
-                let ior = *optional_property!(map, "ior", ast::Node::Number).unwrap_or(&1.3);
+                    optional_property!(self, map, "transparency", Number).unwrap_or(0.);
+                let ior = optional_property!(self, map, "ior", Number).unwrap_or(1.3);
 
-                let texture = match map.get("texture") {
-                    Some(node) => Self::read_texture(node)?,
+                let texture = match map.remove("texture") {
+                    Some(node) => self.read_texture(node)?,
                     None => Texture::Solid(Color::white()),
                 };
 
@@ -317,21 +299,288 @@ impl Interpreter {
     /// Read a texture from a call node.
     ///
     /// A texture can be `solid(color(r, g, b))` or `checkerboard(color(r, g, b), color(r, g, b))`.
-    fn read_texture(node: &ast::Node) -> Result<Texture, InterpretError> {
+    fn read_texture(&mut self, node: ast::Node) -> Result<Texture, InterpretError> {
         match node {
             ast::Node::Call(name, args) => match name.as_str() {
                 "solid" => {
-                    let c = deconstruct_args!(args, ast::Node::Color: c);
-                    Ok(Texture::Solid(c))
+                    let args = self.deconstruct_args(args, &[ast::NodeKind::Color])?;
+                    Ok(Texture::Solid(unwrap_variant!(args[0], ast::Node::Color)))
                 }
                 "checkerboard" => {
-                    let (a, b) = deconstruct_args!(args, ast::Node::Color: a, ast::Node::Color: b);
+                    let args =
+                        self.deconstruct_args(args, &[ast::NodeKind::Color, ast::NodeKind::Color])?;
 
-                    Ok(Texture::Checkerboard(a, b))
+                    Ok(Texture::Checkerboard(
+                        unwrap_variant!(args[0], ast::Node::Color),
+                        unwrap_variant!(args[1], ast::Node::Color),
+                    ))
+                }
+                "image" => {
+                    let args = self.deconstruct_args(args, &[ast::NodeKind::String])?;
+
+                    match self.images.entry(unwrap_variant!(
+                        args.into_iter().next().unwrap(),
+                        ast::Node::String
+                    )) {
+                        Entry::Occupied(buf) => Ok(Texture::Image(buf.get().clone())),
+                        Entry::Vacant(ent) => {
+                            let img = image::open(ent.key())?.into_rgb8();
+                            ent.insert(img.clone());
+                            Ok(Texture::Image(img))
+                        }
+                    }
                 }
                 _ => Err(InterpretError::InvalidCallArgs),
             },
             _ => Err(InterpretError::InvalidCallArgs),
+        }
+    }
+
+    /// Take an array of arg nodes, and if any of them are `Call`s,
+    /// perform the function execution and flatten.
+    fn reduce_calls(&mut self, args: Vec<ast::Node>) -> Result<Vec<ast::Node>, InterpretError> {
+        let mut out = vec![];
+
+        for mut arg in args.into_iter() {
+            while let ast::Node::Call(name, a) = arg {
+                arg = self.call_func(name, a)?;
+            }
+
+            out.push(arg);
+        }
+
+        Ok(out)
+    }
+
+    /// Call a named function with some arguments.
+    /// Its result is another node that can be used as other values.
+    fn call_func(
+        &mut self,
+        name: String,
+        mut args: Vec<ast::Node>,
+    ) -> Result<ast::Node, InterpretError> {
+        args = self.reduce_calls(args)?;
+
+        // float operations
+        macro_rules! op {
+            ($op:tt) => {
+                {
+                    match args.get(0) {
+                        Some(ast::Node::Number(_)) => {
+                            let args = self.deconstruct_args(args, &[ast::NodeKind::Number, ast::NodeKind::Number])?;
+                            Ok(ast::Node::Number(unwrap_variant!(args[0], ast::Node::Number) $op unwrap_variant!(args[1], ast::Node::Number)))
+                        }
+                        Some(ast::Node::Vector(_)) => {
+                            let args = self.deconstruct_args(args, &[ast::NodeKind::Vector, ast::NodeKind::Vector])?;
+                            Ok(ast::Node::Vector(unwrap_variant!(args[0], ast::Node::Vector) $op unwrap_variant!(args[1], ast::Node::Vector)))
+                        }
+                        _ => return Err(InterpretError::InvalidCallArgs),
+                    }
+                }
+            }
+        }
+
+        macro_rules! float_func {
+            ($n:ident) => {{
+                let args = self.deconstruct_args(args, &[ast::NodeKind::Number])?;
+                Ok(ast::Node::Number(
+                    unwrap_variant!(args[0], ast::Node::Number).$n(),
+                ))
+            }};
+        }
+
+        macro_rules! vector_func {
+            ($n:ident, $return:ident) => {{
+                let args = self.deconstruct_args(args, &[ast::NodeKind::Vector])?;
+                Ok(ast::Node::$return(
+                    unwrap_variant!(args[0], ast::Node::Vector).$n(),
+                ))
+            }};
+            ($n:ident, $return:ident,) => {{
+                let args =
+                    self.deconstruct_args(args, &[ast::NodeKind::Vector, ast::NodeKind::Vector])?;
+                Ok(ast::Node::$return(
+                    unwrap_variant!(args[0], ast::Node::Vector)
+                        .$n(unwrap_variant!(args[1], ast::Node::Vector)),
+                ))
+            }};
+        }
+
+        match name.as_str() {
+            // operations
+            "add" => op!(+),
+            "sub" => op!(-),
+            "mul" => op!(*),
+            "div" => op!(/),
+
+            // constructors
+            "vec" => {
+                let args = self.deconstruct_args(
+                    args,
+                    &[
+                        ast::NodeKind::Number,
+                        ast::NodeKind::Number,
+                        ast::NodeKind::Number,
+                    ],
+                )?;
+                Ok(ast::Node::Vector(Vector3::new(
+                    unwrap_variant!(args[0], ast::Node::Number),
+                    unwrap_variant!(args[1], ast::Node::Number),
+                    unwrap_variant!(args[2], ast::Node::Number),
+                )))
+            }
+
+            // floating point functions
+            "sin" => float_func!(sin),
+            "cos" => float_func!(cos),
+            "tan" => float_func!(tan),
+            "asin" => float_func!(asin),
+            "acos" => float_func!(acos),
+            "atan" => float_func!(atan),
+            "abs" => float_func!(abs),
+            "floor" => float_func!(floor),
+            "ceil" => float_func!(ceil),
+            "random" => {
+                let args =
+                    self.deconstruct_args(args, &[ast::NodeKind::Number, ast::NodeKind::Number])?;
+                Ok(ast::Node::Number(rand::thread_rng().gen_range(
+                    unwrap_variant!(args[0], ast::Node::Number)
+                        ..=unwrap_variant!(args[1], ast::Node::Number),
+                )))
+            }
+
+            // vector functions
+            "normalize" => vector_func!(normalize, Vector),
+            "magnitude" => vector_func!(magnitude, Number),
+            "angle" => vector_func!(angle, Number,),
+
+            // constants
+            "pi" => Ok(ast::Node::Number(std::f64::consts::PI)),
+
+            _ => Err(InterpretError::UnknownFunction(name)),
+        }
+    }
+
+    /// Deconstruct a list of arguments based on `NodeKind`s.
+    fn deconstruct_args(
+        &mut self,
+        args: Vec<ast::Node>,
+        dest: &[ast::NodeKind],
+    ) -> Result<Vec<ast::Node>, InterpretError> {
+        // first, confirm that both lengths are identical
+        if args.len() != dest.len() {
+            return Err(InterpretError::InvalidArgCount(dest.len(), args.len()));
+        }
+
+        let mut out = Vec::new();
+
+        // now iterate through each dest arg and compare with the arg we have
+        for (node_kind, mut node) in dest.into_iter().zip(args.into_iter()) {
+            // continuously call any functions until we have a non-call value
+            while let ast::Node::Call(name, args) = node {
+                node = self.call_func(name, args)?;
+            }
+
+            // now, we can compare node_kind with node
+            match node_kind {
+                ast::NodeKind::Boolean => {
+                    if matches!(node, ast::Node::Boolean(_)) {
+                        out.push(node)
+                    }
+                }
+                ast::NodeKind::Color => {
+                    if matches!(node, ast::Node::Color(_)) {
+                        out.push(node)
+                    }
+                }
+                ast::NodeKind::Dictionary => {
+                    if matches!(node, ast::Node::Dictionary(_)) {
+                        out.push(node)
+                    }
+                }
+                ast::NodeKind::Number => {
+                    if matches!(node, ast::Node::Number(_)) {
+                        out.push(node)
+                    }
+                }
+                ast::NodeKind::String => {
+                    if matches!(node, ast::Node::String(_)) {
+                        out.push(node)
+                    }
+                }
+                ast::NodeKind::Vector => {
+                    if matches!(node, ast::Node::Vector(_)) {
+                        out.push(node)
+                    }
+                }
+            }
+        }
+
+        // we return `args` again if and only if they match the intended destination
+        // now the receiver can forcibly unwrap each variant
+        Ok(out)
+    }
+
+    /// Fetch an optional property out of a propertis dictionary.
+    fn optional_property(
+        &mut self,
+        properties: &mut HashMap<String, ast::Node>,
+        name: &'static str,
+        kind: ast::NodeKind,
+    ) -> Result<Option<ast::Node>, InterpretError> {
+        match properties.remove(name) {
+            Some(mut node) => {
+                // continuously call any functions until we have a non-call value
+                while let ast::Node::Call(name, args) = node {
+                    node = self.call_func(name, args)?;
+                }
+
+                match kind {
+                    ast::NodeKind::Boolean => {
+                        if matches!(node, ast::Node::Boolean(_)) {
+                            Ok(Some(node))
+                        } else {
+                            return Err(InterpretError::InvalidCallArgs);
+                        }
+                    }
+                    ast::NodeKind::Color => {
+                        if matches!(node, ast::Node::Color(_)) {
+                            Ok(Some(node))
+                        } else {
+                            return Err(InterpretError::InvalidCallArgs);
+                        }
+                    }
+                    ast::NodeKind::Dictionary => {
+                        if matches!(node, ast::Node::Dictionary(_)) {
+                            Ok(Some(node))
+                        } else {
+                            return Err(InterpretError::InvalidCallArgs);
+                        }
+                    }
+                    ast::NodeKind::Number => {
+                        if matches!(node, ast::Node::Number(_)) {
+                            Ok(Some(node))
+                        } else {
+                            return Err(InterpretError::InvalidCallArgs);
+                        }
+                    }
+                    ast::NodeKind::String => {
+                        if matches!(node, ast::Node::String(_)) {
+                            Ok(Some(node))
+                        } else {
+                            return Err(InterpretError::InvalidCallArgs);
+                        }
+                    }
+                    ast::NodeKind::Vector => {
+                        if matches!(node, ast::Node::Vector(_)) {
+                            Ok(Some(node))
+                        } else {
+                            return Err(InterpretError::InvalidCallArgs);
+                        }
+                    }
+                }
+            }
+            None => Ok(None),
         }
     }
 }

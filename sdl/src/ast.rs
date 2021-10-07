@@ -51,6 +51,18 @@ pub enum Node {
     Boolean(bool),
 }
 
+/// A kind of node *value*, rather than just any node. Used to allow functions to specify
+/// their parameter types.
+#[derive(Debug, Clone)]
+pub enum NodeKind {
+    Dictionary,
+    String,
+    Number,
+    Vector,
+    Color,
+    Boolean,
+}
+
 /// An AST parser, which takes in a list of tokens from the tokenizer.
 #[derive(Debug)]
 pub struct AstParser {
@@ -268,6 +280,11 @@ impl AstParser {
 
     /// Advance the token stream, or error with `AstError::UnexpectedEof`.
     fn next(&mut self) -> Result<Token, AstError> {
-        self.tokens.next().ok_or(AstError::UnexpectedEof)
+        let next_token = self.tokens.next().ok_or(AstError::UnexpectedEof)?;
+        if let Token::Comment = next_token {
+            self.next()
+        } else {
+            Ok(next_token)
+        }
     }
 }

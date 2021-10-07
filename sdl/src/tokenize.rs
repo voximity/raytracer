@@ -59,6 +59,9 @@ pub enum Token {
 
     /// A boolean.
     Boolean(bool),
+
+    /// A comment.
+    Comment,
 }
 
 impl Display for Token {
@@ -80,6 +83,8 @@ impl Display for Token {
             Self::String(str) => write!(f, "\"{}\"", str),
             Self::Number(num) => write!(f, "{}", num),
             Self::Boolean(bool) => write!(f, "{}", if *bool { "true" } else { "false" }),
+
+            Self::Comment => write!(f, "#"),
         }
     }
 }
@@ -133,6 +138,12 @@ impl<R: Read + Seek> Tokenizer<R> {
 
                 // a number: number
                 '0'..='9' | '.' | '-' => tokens.push(Token::Number(self.read_number()?)),
+
+                // a number sign: comment
+                '#' => {
+                    self.read_while(|c| c != '\n')?;
+                    tokens.push(Token::Comment);
+                }
 
                 '<' => {
                     tokens.push(Token::Op(Op::Lt));

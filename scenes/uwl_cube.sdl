@@ -1,0 +1,67 @@
+# This is a test scene.
+
+camera {
+    # Render the image as 1920x1080.
+    vw: 1920,
+    vh: 1080,
+
+    fov: 60,
+    origin: sub(<0, 3, 0>, <3, 0, 0>),
+    pitch: -0.5,
+    yaw: div(pi(), 7),
+}
+
+# We just need one sun light.
+sun {
+    vector: normalize(<-0.8, -1, -0.3>),
+    intensity: 0.8,
+    specular_power: 64,
+}
+
+# This is the main UWL cube in the front.
+aabb {
+    position: vec(random(-1, 1), random(0, 1), random(-9, -7)),
+    size: <1, 1, 1>,
+    material: {
+        texture: image("assets/uwl.png"),
+    }
+}
+
+# This cube is reflective, to the right of the cube.
+sphere {
+    position: <2.5, 0, -5>,
+    radius: 1,
+    material: {
+        texture: solid(color(200, 200, 200)),
+        reflectiveness: 0.7,
+    }
+}
+
+# This cube is solid opaque, to the left of the cube.
+sphere {
+    position: <-2.5, 0, -5>,
+    radius: 1,
+    material: {
+        texture: solid(color(200, 200, 200)),
+    }
+}
+
+# This is a wall behind all of the objects.
+aabb {
+    position: <0, 2, -12>,
+    size: <10, 3, 1>,
+}
+
+# Finally, a checkered ground plate.
+plane {
+    origin: <0, -1, 0>,
+    material: {
+        texture: checkerboard(color(128, 128, 128), color(255, 255, 255)),
+    }
+}
+
+point_light {
+    position: <0, 0, -3.5>,
+    color: color(255, 100, 100),
+    intensity: 2,
+}
