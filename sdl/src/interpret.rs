@@ -193,10 +193,24 @@ impl Interpreter {
                             let obj = required_property!(self, properties, "obj", String);
                             let position = optional_property!(self, properties, "position", Vector).unwrap_or_else(|| Vector3::default());
                             let scale = optional_property!(self, properties, "scale", Number).unwrap_or(1.);
+                            let rotate_xyz = optional_property!(self, properties, "rotate_xyz", Vector);
+                            let rotate_zyx = optional_property!(self, properties, "rotate_zyx", Vector);
                             let material = self.read_material(properties)?;
 
                             let mut mesh = object::Mesh::from_obj(obj, material);
                             mesh.center();
+
+                            if let Some(rotate_xyz) = rotate_xyz {
+                                if rotate_zyx.is_some() {
+                                    return Err(InterpretError::RequiredPropertyMissing("one of rotate_xyz, rotate_zyx, not duplicates"));
+                                }
+
+                                mesh.rotate_xyz(rotate_xyz);
+                            }
+
+                            if let Some(rotate_zyx) = rotate_zyx {
+                                mesh.rotate_zyx(rotate_zyx);
+                            }
 
                             if position != Vector3::default() {
                                 mesh.shift(position);

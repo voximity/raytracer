@@ -135,6 +135,8 @@ for, say, `camera`. Read on to see what properties are valid for what objects.
   * `mesh`\* (string), the filename of the OBJ to load from
   * `position` (vector), the center of the mesh
   * `scale` (number), the scale factor
+  * `rotate_xyz` (vector), a rotation vector for each axis (all in radians), applied in XYZ order
+  * `rotate_zyx` (vector), a rotation vector for each axis (all in radians), applied in ZYX order
   * `material` (dictionary), see below
 * `plane` (a scene object)
   * `origin`\* (vector), the origin of the plane

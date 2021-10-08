@@ -1,4 +1,4 @@
-use crate::{acceleration, material::Material, math::{Ray, VECTOR_MAX, VECTOR_MIN, Vector3}, scene::EPSILON};
+use crate::{acceleration, material::Material, math::{Matrix, Ray, VECTOR_MAX, VECTOR_MIN, Vector3}, scene::EPSILON};
 
 use super::{AabbIntersector, Hit, Intersect, SceneObject};
 
@@ -295,6 +295,26 @@ impl Mesh {
             tri.v[0] *= delta;
             tri.v[1] *= delta;
             tri.v[2] *= delta;
+        }
+    }
+
+    pub fn rotate_xyz(&mut self, rot: Vector3) {
+        let rot = Matrix::from_euler_xyz(-rot.x, -rot.y, -rot.z);
+
+        for tri in self.triangles.iter_mut() {
+            tri.v[0] = (rot * Matrix::from(tri.v[0])).pos();
+            tri.v[1] = (rot * Matrix::from(tri.v[1])).pos();
+            tri.v[2] = (rot * Matrix::from(tri.v[2])).pos();
+        }
+    }
+
+    pub fn rotate_zyx(&mut self, rot: Vector3) {
+        let rot = Matrix::from_euler_zyx(-rot.x, -rot.y, -rot.z);
+
+        for tri in self.triangles.iter_mut() {
+            tri.v[0] = (Matrix::from(tri.v[0]) * rot).pos();
+            tri.v[1] = (Matrix::from(tri.v[1]) * rot).pos();
+            tri.v[2] = (Matrix::from(tri.v[2]) * rot).pos();
         }
     }
 
