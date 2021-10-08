@@ -122,6 +122,11 @@ for, say, `camera`. Read on to see what properties are valid for what objects.
   * `yaw` (number), the yaw of camera rotation in radians
   * `pitch` (number), the pitch of camera rotation in radians
   * `fov` (number), the field of view of the camera in degrees
+* `skybox` (defined once)
+  * `type` (string), dictates what type of skybox to use
+    * `"normal"`: use the ray direction to determine color
+    * `"solid"`: specify `color` (a color) to determine the color
+    * `"cubemap"`: specify `image` (a string) to determine the image filename to use as a cubemap
 * `aabb` (a scene object)
   * `position`\* (vector), the center of the AABB
   * `size`\* (vector), the distance from one corner to the center of the AABB (radial size if you will)

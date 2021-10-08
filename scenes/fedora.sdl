@@ -1,9 +1,14 @@
 camera {
     vw: 1920,
     vh: 1080,
-    origin: <1.5, 0.6, 3>,
+    origin: <1.5, 0.3, 3>,
     yaw: -0.5,
     pitch: -0.3,
+}
+
+skybox {
+    type: "cubemap",
+    image: "assets/cubemap.jpg",
 }
 
 sun {
@@ -16,7 +21,7 @@ mesh {
     obj: "assets/fedora.obj",
     position: <0, -0.5, 0>,
     material: {
-        texture: image("assets/Handle1Tex.png"),
+        texture: image("assets/fedora.png"),
     }
 }
 

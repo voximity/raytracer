@@ -5,13 +5,7 @@ use std::{
 
 use image::{ImageBuffer, Rgb};
 use rand::Rng;
-use raytracer::{
-    lighting,
-    material::{Color, Material, Texture},
-    math::Vector3,
-    object,
-    scene::Scene,
-};
+use raytracer::{lighting, material::{Color, Material, Texture}, math::Vector3, object, scene::Scene, skybox};
 use thiserror::Error;
 
 use crate::{
@@ -152,6 +146,36 @@ impl Interpreter {
                             }
                             if let Some(fov) = fov {
                                 self.scene.camera.set_fov(fov);
+                            }
+                        }
+                        "skybox" => {
+                            if object_names.iter().any(|n| n.as_str() == "skybox") {
+                                return Err(InterpretError::NonUniqueObject("skybox"));
+                            }
+
+                            let t = required_property!(self, properties, "type", String);
+
+                            match t.as_str() {
+                                "normal" => self.scene.skybox = Box::new(skybox::Normal),
+                                "solid" => {
+                                    let color = required_property!(self, properties, "color", Color);
+                                    self.scene.skybox = Box::new(skybox::Solid(color));
+                                }
+                                "cubemap" => {
+                                    let filename = required_property!(self, properties, "image", String);
+
+                                    let img = match self.images.entry(filename) {
+                                        Entry::Occupied(buf) => buf.get().clone(),
+                                        Entry::Vacant(ent) => {
+                                            let img = image::open(ent.key())?.into_rgb8();
+                                            ent.insert(img.clone());
+                                            img
+                                        }
+                                    };
+
+                                    self.scene.skybox = Box::new(skybox::Cubemap::new(img));
+                                }
+                                _ => return Err(InterpretError::InvalidMaterials),
                             }
                         }
 
