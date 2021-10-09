@@ -20,7 +20,6 @@ sun {
 mesh {
     obj: "assets/fedora.obj",
     position: <0, -0.5, 0>,
-    rotate_xyz: vec(0, mul(pi(), 0.5), 0),
     material: {
         texture: image("assets/fedora.png"),
     }

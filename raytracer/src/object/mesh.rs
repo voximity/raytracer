@@ -103,7 +103,7 @@ impl Triangle {
                 let (iu, iv, iw) = (i.u as f32, i.v as f32, 1. - i.u as f32 - i.v as f32);
                 let u = a.0 * iw + b.0 * iu + c.0 * iv as f32;
                 let v = a.1 * iw + b.1 * iu + c.1 * iv as f32;
-                Some((u, 1. - v))
+                Some((u.rem_euclid(1.), (1. - v).rem_euclid(1.)))
             }
         }
     }
