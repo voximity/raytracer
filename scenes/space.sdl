@@ -1,0 +1,24 @@
+camera {
+    origin: <3, 3, 1>,
+    pitch: -0.3,
+    yaw: -0.45,
+    vw: 1920,
+    vh: 1080,
+}
+
+skybox {
+    type: "cubemap",
+    image: "assets/space.png",
+}
+
+sun {
+    vector: <-0.5, -1, -0.2>,
+}
+
+sphere {
+    position: <0, 1, -6>,
+    radius: 2,
+    material: {
+        texture: image("assets/earth.jpg"),
+    }
+}

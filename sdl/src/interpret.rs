@@ -163,7 +163,6 @@ impl Interpreter {
                                 }
                                 "cubemap" => {
                                     let filename = required_property!(self, properties, "image", String);
-
                                     let img = match self.images.entry(filename) {
                                         Entry::Occupied(buf) => buf.get().clone(),
                                         Entry::Vacant(ent) => {

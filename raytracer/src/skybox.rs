@@ -109,6 +109,8 @@ impl Skybox for Cubemap {
 
         let uv = if normal.y == 1. {
             (1. - uv.0, 1. - uv.1)
+        } else if normal.y == -1. {
+            (uv.0, 1. - uv.1)
         } else {
             uv
         };
