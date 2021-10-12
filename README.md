@@ -2,11 +2,15 @@
 
 This is a raytracer written in Rust for my apprenticeship project at UW-L.
 
-TODO: write more of me
+This project is my current work for my apprenticeship project at the University of Wisconsin-La
+Crosse. It is a rewrite of an [older project](https://github.com/voximity/omegga-raytracer-cr)
+in Rust, designed for maximum performance. Over the course of this school year, I am working with
+Dr. Kenny Hunt to research rendering and optimization techniques as a way to further my
+understanding of high-performance computing, especially with parallelization.
 
 ## Crates
 
-As of now, there are two crates in this project:
+As of now, there are several crates in this project:
 
 * `raytracer` - The raytracer itself, which takes a scene, raytraces it, and outputs it to a file.
 * `stitcher` - A cubemap stitcher. Provided 6 cubemap faces, this outputs a single atlas that can be used by the raytracer.
@@ -14,6 +18,24 @@ As of now, there are two crates in this project:
 * `sdl_lua` - An SDL runtime that uses Lua to describe a scene. This crate is only included for completeness; it is not in a functional state.
 
 For more information on the SDL (scene description language), please visit [its README](/sdl/README.md).
+
+## Using
+
+To start, pick an SDL runtime. The proprietary language interpreter is `sdl`, so you will likely
+want to use that one.
+
+Start by building with `cargo build --release -p <runtime>`, where `<runtime>` is the name of the
+runtime crate you'd like to use. Generally, use `sdl`.
+
+You can render a scene with `./target/release/sdl <source file> [-o <output file>]`. For example,
+you can render `fedora.sdl` to `fedora.png` with `./target/release/sdl fedora.sdl -o fedora.png`.
+
+To write your own scene, see [the `sdl` README](/sdl/README.md).
+
+## Contributions
+
+You are welcome to fork and tinker with this project, but I will not be accepting contributions.
+Sorry!
 
 ## Things to research
 
