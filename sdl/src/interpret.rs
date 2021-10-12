@@ -13,6 +13,7 @@ use crate::{
     tokenize::{TokenizeError, Tokenizer},
 };
 
+/// An interpreter error.
 #[derive(Debug, Error)]
 pub enum InterpretError {
     #[error("tokenizer error: {0}")]
@@ -72,6 +73,7 @@ macro_rules! unwrap_variant {
     };
 }
 
+/// The image cache, that is, a map between file names and loaded images.
 type ImageCache = HashMap<String, ImageBuffer<Rgb<u8>, Vec<u8>>>;
 
 /// The interpreter is the general runtime for the SDL interpreter. It is responsible for storing
@@ -102,11 +104,18 @@ impl Interpreter {
             _ => unreachable!(),
         };
 
+        // this is so that `self` is not fully destructed
+        // and we can continue to pass it to methods
+        // that receive `&mut self`
         self.root = ast::Node::Root(vec![]);
 
         // check for duplicate camera objects
         let mut object_names: Vec<String> = Vec::new();
 
+        // match all objects in the root node
+        // eventually, we will want to handle loops here
+        // and any other type of node that can belong in
+        // the root node
         for node in root.into_iter() {
             match node {
                 ast::Node::Object {
@@ -575,7 +584,7 @@ impl Interpreter {
         Ok(out)
     }
 
-    /// Fetch an optional property out of a propertis dictionary.
+    /// Fetch an optional property out of a properties dictionary.
     fn optional_property(
         &mut self,
         properties: &mut HashMap<String, ast::Node>,

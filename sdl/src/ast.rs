@@ -64,7 +64,8 @@ pub enum NodeKind {
     Boolean,
 }
 
-/// An AST parser, which takes in a list of tokens from the tokenizer.
+/// An AST parser, which takes in a list of tokens from the tokenizer and parses out to
+/// a root AST node, which is composed of many more AST nodes.
 #[derive(Debug)]
 pub struct AstParser {
     tokens: Peekable<IntoIter<Token>>,

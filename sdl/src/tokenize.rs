@@ -37,6 +37,7 @@ pub enum Sep {
     BracketClose,
 }
 
+/// A token, some significant piece of data to be parsed by the AST.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     /// A separator.
@@ -93,6 +94,8 @@ impl From<Sep> for Token {
     }
 }
 
+/// A tokenizer. Wraps around a `Read + Seek` and reads out a stream of tokens, to be
+/// parsed by the AST.
 pub struct Tokenizer<R: Read + Seek> {
     reader: R,
 }
