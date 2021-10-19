@@ -1,0 +1,23 @@
+camera {
+    vw: 1920,
+    vh: 1080,
+}
+
+sun {
+    vector: <-0.4, -1, -0.2>,
+    intensity: 0.6,
+}
+
+mesh {
+    obj: "assets/private/bunny.obj",
+    position: <0, 0, -10>,
+    scale: 2,
+    rotate_xyz: vec(
+        random(0, mul(pi(), 2)),
+        random(0, mul(pi(), 2)),
+        random(0, mul(pi(), 2))
+    ),
+    material: {
+        texture: solid(color(0, 180, 255)),
+    }
+}

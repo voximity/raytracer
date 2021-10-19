@@ -254,3 +254,32 @@ The SDL is capable of functions like `sin(x)`, `cos(x)`, `normalize(vector)`, `a
 add image textures, and more. This is all done in the `sdl` crate.
 
 ![Progress screenshot from 10/7/2021](/images/readme/10_7_2021.png)
+
+#### 10/19/2021
+
+Today, I got scope stack and for loops working. The following code produces the following image:
+
+```
+tau = mul(pi(), 2)
+segments = 16
+
+sun {
+    vector: <-0.8, -1, -0.2>,
+}
+
+for i in 0 to segments {
+    frac = div(i, segments)
+    inner = mul(frac, tau)
+    color_channel = mul(frac, 255)
+
+    sphere {
+        position: vec(cos(inner), sin(inner), -4),
+        radius: 0.3,
+        material: {
+            texture: solid(color(color_channel, color_channel, color_channel)),
+        }
+    }
+}
+```
+
+![Progress screenshot from 10/19/2021](/images/readme/10_19_2021.png)

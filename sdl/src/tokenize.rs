@@ -22,6 +22,8 @@ pub enum TokenizeError {
 pub enum Op {
     Lt,
     Gt,
+    Assign,
+    RangeExclusive,
 }
 
 /// A separator.
@@ -73,6 +75,8 @@ impl Display for Token {
 
             Self::Op(Op::Lt) => write!(f, "<"),
             Self::Op(Op::Gt) => write!(f, ">"),
+            Self::Op(Op::Assign) => write!(f, "="),
+            Self::Op(Op::RangeExclusive) => write!(f, ".."),
 
             Self::Identifier(ident) => write!(f, "{}", ident),
             Self::String(str) => write!(f, "\"{}\"", str),
@@ -132,7 +136,7 @@ impl<R: Read + Seek> Tokenizer<R> {
                 '"' => tokens.push(Token::String(self.read_string()?)),
 
                 // a number: number
-                '0'..='9' | '.' | '-' => tokens.push(Token::Number(self.read_number()?)),
+                '0'..='9' | '-' => tokens.push(Token::Number(self.read_number()?)),
 
                 // a number sign: comment
                 '#' => {
@@ -178,6 +182,17 @@ impl<R: Read + Seek> Tokenizer<R> {
                 ':' => {
                     tokens.push(Sep::Colon.into());
                     self.skip()?;
+                }
+                '=' => {
+                    tokens.push(Op::Assign.into());
+                    self.skip()?;
+                }
+                '.' => {
+                    self.skip()?;
+                    match self.next()? {
+                        '.' => tokens.push(Op::RangeExclusive.into()),
+                        x => return Err(TokenizeError::UnexpectedCharacter(x)),
+                    }
                 }
 
                 x => return Err(TokenizeError::UnexpectedCharacter(x)),

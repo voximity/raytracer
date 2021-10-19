@@ -1,0 +1,20 @@
+tau = mul(pi(), 2)
+segments = 16
+
+sun {
+    vector: <-0.8, -1, -0.2>,
+}
+
+for i in 0 to segments {
+    frac = div(i, segments)
+    inner = mul(frac, tau)
+    color_channel = mul(frac, 255)
+
+    sphere {
+        position: vec(cos(inner), sin(inner), -4),
+        radius: 0.3,
+        material: {
+            texture: solid(color(color_channel, color_channel, color_channel)),
+        }
+    }
+}

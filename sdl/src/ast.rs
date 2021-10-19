@@ -26,6 +26,17 @@ pub enum Node {
         properties: HashMap<String, Node>,
     },
 
+    /// Assignment to a variable.
+    Assign { name: String, value: Box<Node> },
+
+    /// A for loop.
+    For {
+        var: String,
+        from: Box<Node>,
+        to: Box<Node>,
+        body: Vec<Node>,
+    },
+
     /// A dictionary. It acts as a map whose keys are identifiers and whose values are more AST nodes.
     Dictionary(HashMap<String, Node>),
 
@@ -49,6 +60,9 @@ pub enum Node {
 
     /// A boolean.
     Boolean(bool),
+
+    /// A scope terminator.
+    ScopeTerminator,
 }
 
 /// A kind of node *value*, rather than just any node. Used to allow functions to specify
@@ -84,16 +98,90 @@ impl AstParser {
 
     /// Parse the root node, that is, the global scope.
     pub fn parse_root(mut self) -> Result<Node, AstError> {
+        let body = self.parse_scope()?;
+        if let Some(Node::ScopeTerminator) = body.last() {
+            Err(AstError::UnexpectedToken(
+                "not a closing brace".into(),
+                Token::Sep(Sep::BraceClose),
+            ))
+        } else {
+            Ok(Node::Root(body))
+        }
+    }
+
+    /// Parse as much of a scope as possible, returning all `Node`s.
+    pub fn parse_scope(&mut self) -> Result<Vec<Node>, AstError> {
         let mut nodes = vec![];
 
         while let Ok(token) = self.next() {
             match token {
-                Token::Identifier(identifier) => nodes.push(self.read_object(identifier)?),
-                t => return Err(AstError::UnexpectedToken("a scene object".into(), t)),
+                Token::Identifier(identifier) => {
+                    // once we read the identifier, we have to consider two cases:
+                    // 1. the user is trying to create a scene object
+                    // 2. the user is trying to set the value of a variable
+                    // 3. we are using some sort of loop or condition
+                    match identifier.as_str() {
+                        "for" => {
+                            let ident = match self.next()? {
+                                Token::Identifier(i) => i,
+                                t => {
+                                    return Err(AstError::UnexpectedToken(
+                                        "an identifier".into(),
+                                        t,
+                                    ))
+                                }
+                            };
+
+                            self.read_expecting(Token::Identifier("in".into()))?;
+
+                            let from = self.parse_value()?;
+                            self.read_expecting(Token::Identifier("to".into()))?;
+                            let to = self.parse_value()?;
+
+                            self.read_expecting(Token::Sep(Sep::BraceOpen))?;
+                            let body = self.parse_scope()?;
+                            match body.last() {
+                                Some(Node::ScopeTerminator) => (),
+                                _ => return Err(AstError::UnexpectedEof),
+                            }
+
+                            nodes.push(Node::For {
+                                var: ident,
+                                from: Box::new(from),
+                                to: Box::new(to),
+                                body,
+                            });
+
+                            continue;
+                        }
+                        _ => (),
+                    }
+
+                    match self.tokens.peek() {
+                        Some(Token::Op(Op::Assign)) => {
+                            self.tokens.next();
+                            nodes.push(Node::Assign {
+                                name: identifier,
+                                value: Box::new(self.parse_value()?),
+                            })
+                        }
+                        _ => nodes.push(self.read_object(identifier)?),
+                    }
+                }
+                Token::Sep(Sep::BraceClose) => {
+                    nodes.push(Node::ScopeTerminator);
+                    return Ok(nodes);
+                }
+                t => {
+                    return Err(AstError::UnexpectedToken(
+                        "something usable in a scope, or a scope terminator".into(),
+                        t,
+                    ))
+                }
             }
         }
 
-        Ok(Node::Root(nodes))
+        Ok(nodes)
     }
 
     /// Parse any "value": effectively an expression that has some value.
@@ -109,12 +197,7 @@ impl AstParser {
                         Token::Sep(Sep::ParensClose),
                     )?;
 
-                    Ok(match (ident.as_str(), &params[..]) {
-                        ("color", &[Node::Number(r), Node::Number(g), Node::Number(b)]) => {
-                            Node::Color(Color::new(r as u8, g as u8, b as u8))
-                        }
-                        _ => Node::Call(ident, params),
-                    })
+                    Ok(Node::Call(ident, params))
                 } else {
                     Ok(Node::Identifier(ident))
                 }

@@ -1,4 +1,9 @@
-use crate::{acceleration, material::Material, math::{Matrix, Ray, VECTOR_MAX, VECTOR_MIN, Vector3}, scene::EPSILON};
+use crate::{
+    acceleration,
+    material::Material,
+    math::{Matrix, Ray, Vector3, VECTOR_MAX, VECTOR_MIN},
+    scene::EPSILON,
+};
 
 use super::{AabbIntersector, Hit, Intersect, SceneObject};
 

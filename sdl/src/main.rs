@@ -36,7 +36,7 @@ fn main() {
         .unwrap();
 
     println!("Scene constructed in {}s", now.elapsed().as_secs_f32());
-    
+
     scene.render_to(matches.value_of("output").unwrap(), image::ImageFormat::Png);
     println!("Operation complete in in {}s", now.elapsed().as_secs_f32());
 }

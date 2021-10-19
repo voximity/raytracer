@@ -5,7 +5,14 @@ use std::{
 
 use image::{ImageBuffer, Rgb};
 use rand::Rng;
-use raytracer::{lighting, material::{Color, Material, Texture}, math::Vector3, object, scene::Scene, skybox};
+use raytracer::{
+    lighting,
+    material::{Color, Material, Texture},
+    math::Vector3,
+    object,
+    scene::Scene,
+    skybox,
+};
 use thiserror::Error;
 
 use crate::{
@@ -45,6 +52,9 @@ pub enum InterpretError {
 
     #[error("no function by the name {0}")]
     UnknownFunction(String),
+
+    #[error("no variable defined by the name {0}")]
+    UndefinedVariable(String),
 }
 
 macro_rules! optional_property {
@@ -73,6 +83,10 @@ macro_rules! unwrap_variant {
     };
 }
 
+/// A scope is a wrapper around a dictionary from identifier
+/// to AST node. The AST node is expected to be fully reduced.
+struct Scope(HashMap<String, ast::Node>);
+
 /// The image cache, that is, a map between file names and loaded images.
 type ImageCache = HashMap<String, ImageBuffer<Rgb<u8>, Vec<u8>>>;
 
@@ -83,6 +97,8 @@ pub struct Interpreter {
     root: ast::Node,
     scene: Scene,
     images: ImageCache,
+    stack: Vec<Scope>,
+    object_names: Vec<String>,
 }
 
 impl Interpreter {
@@ -94,6 +110,8 @@ impl Interpreter {
             root: AstParser::new(Tokenizer::new(reader).tokenize()?).parse_root()?,
             scene: Scene::default(),
             images: HashMap::new(),
+            stack: vec![Scope(HashMap::new())],
+            object_names: Vec::new(),
         })
     }
 
@@ -109,15 +127,51 @@ impl Interpreter {
         // that receive `&mut self`
         self.root = ast::Node::Root(vec![]);
 
-        // check for duplicate camera objects
-        let mut object_names: Vec<String> = Vec::new();
+        // match nodes that can be in the root node
+        self.run_scope(root)?;
 
-        // match all objects in the root node
-        // eventually, we will want to handle loops here
-        // and any other type of node that can belong in
-        // the root node
-        for node in root.into_iter() {
+        Ok(self.scene)
+    }
+
+    fn run_scope(&mut self, nodes: Vec<ast::Node>) -> Result<(), InterpretError> {
+        for node in nodes.into_iter() {
             match node {
+                ast::Node::Assign { name, value } => {
+                    let reduced = self.reduce_calls(vec![*value])?.into_iter().next().unwrap();
+                    self.stack.last_mut().unwrap().0.insert(name, reduced);
+                }
+                ast::Node::For {
+                    var,
+                    from,
+                    to,
+                    body,
+                } => {
+                    let from = unwrap_variant!(
+                        self.reduce_calls(vec![*from])?.into_iter().next().unwrap(),
+                        ast::Node::Number
+                    )
+                    .floor() as i32;
+                    let to = unwrap_variant!(
+                        self.reduce_calls(vec![*to])?.into_iter().next().unwrap(),
+                        ast::Node::Number
+                    )
+                    .floor() as i32;
+
+                    for i in from..to {
+                        // push a new scope to the stack with the index variable
+                        self.stack.push(Scope(
+                            vec![(var.clone(), ast::Node::Number(i as f64))]
+                                .into_iter()
+                                .collect(),
+                        ));
+
+                        // run the scope body
+                        self.run_scope(body.clone())?;
+
+                        // pop the scope from the stack
+                        self.stack.pop();
+                    }
+                }
                 ast::Node::Object {
                     name,
                     mut properties,
@@ -125,7 +179,7 @@ impl Interpreter {
                     match name.as_str() {
                         // one-time scene properties
                         "camera" => {
-                            if object_names.iter().any(|n| n.as_str() == "camera") {
+                            if self.object_names.iter().any(|n| n.as_str() == "camera") {
                                 return Err(InterpretError::NonUniqueObject("camera"));
                             }
 
@@ -158,7 +212,7 @@ impl Interpreter {
                             }
                         }
                         "skybox" => {
-                            if object_names.iter().any(|n| n.as_str() == "skybox") {
+                            if self.object_names.iter().any(|n| n.as_str() == "skybox") {
                                 return Err(InterpretError::NonUniqueObject("skybox"));
                             }
 
@@ -167,11 +221,13 @@ impl Interpreter {
                             match t.as_str() {
                                 "normal" => self.scene.skybox = Box::new(skybox::Normal),
                                 "solid" => {
-                                    let color = required_property!(self, properties, "color", Color);
+                                    let color =
+                                        required_property!(self, properties, "color", Color);
                                     self.scene.skybox = Box::new(skybox::Solid(color));
                                 }
                                 "cubemap" => {
-                                    let filename = required_property!(self, properties, "image", String);
+                                    let filename =
+                                        required_property!(self, properties, "image", String);
                                     let img = match self.images.entry(filename) {
                                         Entry::Occupied(buf) => buf.get().clone(),
                                         Entry::Vacant(ent) => {
@@ -199,18 +255,29 @@ impl Interpreter {
                         }
                         "mesh" => {
                             let obj = required_property!(self, properties, "obj", String);
-                            let position = optional_property!(self, properties, "position", Vector).unwrap_or_else(|| Vector3::default());
-                            let scale = optional_property!(self, properties, "scale", Number).unwrap_or(1.);
-                            let rotate_xyz = optional_property!(self, properties, "rotate_xyz", Vector);
-                            let rotate_zyx = optional_property!(self, properties, "rotate_zyx", Vector);
+                            let position = optional_property!(self, properties, "position", Vector)
+                                .unwrap_or_else(|| Vector3::default());
+                            let scale =
+                                optional_property!(self, properties, "scale", Number).unwrap_or(1.);
+                            let rotate_xyz =
+                                optional_property!(self, properties, "rotate_xyz", Vector);
+                            let rotate_zyx =
+                                optional_property!(self, properties, "rotate_zyx", Vector);
                             let material = self.read_material(properties)?;
 
                             let mut mesh = object::Mesh::from_obj(obj, material);
+
+                            if scale != 1. {
+                                mesh.scale(scale);
+                            }
+
                             mesh.center();
 
                             if let Some(rotate_xyz) = rotate_xyz {
                                 if rotate_zyx.is_some() {
-                                    return Err(InterpretError::RequiredPropertyMissing("one of rotate_xyz, rotate_zyx, not duplicates"));
+                                    return Err(InterpretError::RequiredPropertyMissing(
+                                        "one of rotate_xyz, rotate_zyx, not duplicates",
+                                    ));
                                 }
 
                                 mesh.rotate_xyz(rotate_xyz);
@@ -222,10 +289,6 @@ impl Interpreter {
 
                             if position != Vector3::default() {
                                 mesh.shift(position);
-                            }
-
-                            if scale != 0. {
-                                mesh.scale(scale);
                             }
 
                             mesh.recalculate();
@@ -320,13 +383,13 @@ impl Interpreter {
                         _ => return Err(InterpretError::UnknownObject(name.clone())),
                     }
 
-                    object_names.push(name.clone());
+                    self.object_names.push(name.clone());
                 }
                 _ => (),
             }
         }
 
-        Ok(self.scene)
+        Ok(())
     }
 
     /// Read a material from a dictionary node.
@@ -405,6 +468,13 @@ impl Interpreter {
         let mut out = vec![];
 
         for mut arg in args.into_iter() {
+            if let ast::Node::Identifier(name) = arg {
+                arg = match self.variable_value(&name) {
+                    Some(value) => value,
+                    None => return Err(InterpretError::UndefinedVariable(name)),
+                };
+            }
+
             while let ast::Node::Call(name, a) = arg {
                 arg = self.call_func(name, a)?;
             }
@@ -477,6 +547,22 @@ impl Interpreter {
             "div" => op!(/),
 
             // constructors
+            "color" => {
+                let args = self.deconstruct_args(
+                    args,
+                    &[
+                        ast::NodeKind::Number,
+                        ast::NodeKind::Number,
+                        ast::NodeKind::Number,
+                    ],
+                )?;
+
+                Ok(ast::Node::Color(Color::new(
+                    unwrap_variant!(args[0], ast::Node::Number) as u8,
+                    unwrap_variant!(args[1], ast::Node::Number) as u8,
+                    unwrap_variant!(args[2], ast::Node::Number) as u8,
+                )))
+            }
             "vec" => {
                 let args = self.deconstruct_args(
                     args,
@@ -594,6 +680,13 @@ impl Interpreter {
         match properties.remove(name) {
             Some(mut node) => {
                 // continuously call any functions until we have a non-call value
+                if let ast::Node::Identifier(name) = node {
+                    node = match self.variable_value(&name) {
+                        Some(value) => value,
+                        None => return Err(InterpretError::UndefinedVariable(name)),
+                    };
+                }
+
                 while let ast::Node::Call(name, args) = node {
                     node = self.call_func(name, args)?;
                 }
@@ -645,5 +738,17 @@ impl Interpreter {
             }
             None => Ok(None),
         }
+    }
+
+    /// Gets the value of a variable, somewhere along the stack, moving backwards.
+    /// This clones the value of the variable.
+    fn variable_value(&mut self, identifier: &String) -> Option<ast::Node> {
+        for scope in self.stack.iter().rev() {
+            if let Some(value) = scope.0.get(identifier) {
+                return Some(value.to_owned());
+            }
+        }
+
+        None
     }
 }
