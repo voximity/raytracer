@@ -5,6 +5,28 @@ a (mostly) declarative language that is responsible for describing the objects i
 to the raytracer. It is designed to be fast and readable. It is reminiscent of POV-Ray's
 SDL, JSON, and maybe even shader languages like GLSL or HLSL.
 
+## Running
+
+To render from an SDL file,
+
+```
+sdl my_file.sdl
+```
+
+To change its output,
+
+```
+sdl my_file.sdl -o my_render.png
+```
+
+To continuously watch the SDL file for changes and rerender on all saves,
+
+```
+sdl --watch my_file.sdl
+```
+
+Optionally compile with cargo initially by changing `sdl` in all cases to `cargo run --release -p sdl -- `.
+
 ## Specification
 
 The `sdl` crate is capable of rendering scenes from `sdl` files. Some examples are in
@@ -57,7 +79,8 @@ There are a number of functions that can be used as values.
 #### Constructors
 
 * `vec(x, y, z)` constructs a vector from 3 numbers (this is useful as syntax like `<PI, PI, PI>` is not supported. instead, prefer `vec(PI, PI, PI)`)
-* `color(r, g, b)` constructs a color from 3 numbers (each 0-255)
+* `color(r, g, b)` or `rgb(r, g, b)` constructs a color from 3 numbers (each 0-255)
+* `hsv(h, s, v)` constructs a color from HSV values where H is in [0, 360], and S and V are both from 0 to 1.
 
 #### Floating point functions
 

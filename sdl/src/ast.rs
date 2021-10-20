@@ -292,11 +292,20 @@ impl AstParser {
                     }
                 };
 
-                s.read_sep(Sep::Colon)?;
-
-                Ok((key, s.parse_value()?))
+                if let Some(Token::Sep(Sep::Colon)) = s.tokens.peek() {
+                    s.next()?;
+                    Ok((key, s.parse_value()?))
+                } else {
+                    Ok((key.clone(), Node::Identifier(key)))
+                }
             },
-            |s| s.read_sep(Sep::Comma),
+            |s| {
+                if let Some(Token::Sep(Sep::Comma)) = s.tokens.peek() {
+                    s.next()?;
+                }
+
+                Ok(())
+            },
             Token::Sep(Sep::BraceClose),
         )?;
 

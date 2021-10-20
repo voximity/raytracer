@@ -1,0 +1,52 @@
+let n = 12
+let dist = 4.5
+let radius = 1
+
+camera {
+    vw: 1920
+    vh: 1080
+    origin: <0.8, 0, 1.5>
+    yaw: -0.5
+    pitch: -0.3
+}
+
+skybox {
+    type: "cubemap"
+    image: "assets/storforsen_4.jpg"
+}
+
+plane {
+    origin: <0, -1, 0>
+    vector: <0, 1, 0>
+}
+
+mesh {
+    position: <0, -0.5, 0>
+    obj: "assets/fedora.obj"
+    scale: 0.7
+    material: {
+        texture: image("assets/fedora.png")
+    }
+}
+
+for i in 0 to n {
+    let frac = div(i, n)
+    let inner = mul(frac, TAU)
+    let position = vec(mul(cos(inner), dist), 0, mul(sin(inner), dist))
+    let color = hsv(deg(inner), 1, 1)
+
+    sphere {
+        position
+        radius
+        material: {
+            texture: solid(color)
+            reflectiveness: 0.75
+        }
+    }
+
+    point_light {
+        position: mul(position, vec(0.5, 0.5, 0.5))
+        color
+        intensity: 0.5
+    }
+}

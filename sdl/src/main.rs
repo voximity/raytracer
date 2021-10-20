@@ -1,8 +1,9 @@
-use std::{fs::File, time::Instant};
+use std::{fs::File, sync::mpsc, time::{Duration, Instant}};
 
 use clap::{App, Arg};
+use notify::Watcher;
 
-use crate::interpret::Interpreter;
+use crate::interpret::{InterpretError, Interpreter};
 
 mod ast;
 mod interpret;
@@ -27,16 +28,49 @@ fn main() {
                 .default_value("render.png")
                 .required(false),
         )
+        .arg(
+            Arg::with_name("watch")
+                .long("watch")
+                .short("w")
+                .help("Whether or not to watch the file and rerender on save")
+                .required(false),
+        )
         .get_matches();
 
-    let now = Instant::now();
-    let scene = Interpreter::new(File::open(matches.value_of("SOURCE").unwrap()).unwrap())
-        .unwrap()
-        .run()
-        .unwrap();
+    fn render(matches: &clap::ArgMatches) -> Result<(), InterpretError> {
+        let now = Instant::now();
+        let scene = Interpreter::new(File::open(matches.value_of("SOURCE").unwrap()).unwrap())?.run()?;
+    
+        println!("Scene constructed in {}s", now.elapsed().as_secs_f32());
+    
+        scene.render_to(matches.value_of("output").unwrap(), image::ImageFormat::Png);
+        println!("Operation complete in in {}s\n", now.elapsed().as_secs_f32());
 
-    println!("Scene constructed in {}s", now.elapsed().as_secs_f32());
+        Ok(())
+    }
 
-    scene.render_to(matches.value_of("output").unwrap(), image::ImageFormat::Png);
-    println!("Operation complete in in {}s", now.elapsed().as_secs_f32());
+    if matches.is_present("watch") {
+        let source = matches.value_of("SOURCE").unwrap();
+
+        let (tx, rx) = mpsc::channel();
+        let mut watcher = notify::watcher(tx, Duration::from_millis(500)).unwrap();
+        watcher.watch(source, notify::RecursiveMode::NonRecursive).unwrap();
+
+        println!("Now listening for file changes at {}", source);
+        loop {
+            match rx.recv() {
+                Ok(event) if matches!(event, notify::DebouncedEvent::Write(_)) => {
+                    if let Err(e) = render(&matches) {
+                        println!("Failed to render: {}", e);
+                    }
+                }
+                Err(_) => panic!("failed to watch file!"),
+                _ => (),
+            }
+        }
+    } else {
+        if let Err(e) = render(&matches) {
+            println!("Failed to render: {}", e);
+        }
+    }
 }

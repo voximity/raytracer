@@ -613,7 +613,7 @@ impl Interpreter {
             "div" => op!(/),
 
             // constructors
-            "color" => {
+            "color" | "rgb" => {
                 let args = self.deconstruct_args(
                     values,
                     &[
@@ -628,6 +628,44 @@ impl Interpreter {
                     unwrap_variant!(args[1], Value::Number) as u8,
                     unwrap_variant!(args[2], Value::Number) as u8,
                 )))
+            }
+            "hsv" => {
+                let args = self.deconstruct_args(
+                    values,
+                    &[
+                        ast::NodeKind::Number,
+                        ast::NodeKind::Number,
+                        ast::NodeKind::Number,
+                    ],
+                )?;
+
+                let (h, s, v) = (
+                    unwrap_variant!(args[0], Value::Number) % 360.,
+                    unwrap_variant!(args[1], Value::Number),
+                    unwrap_variant!(args[2], Value::Number),
+                );
+
+                let c = v * s;
+                let x = c * (1. - (h / 60. % 2. - 1.).abs());
+                let m = v - c;
+
+                let (r, g, b) = if (0. ..60.).contains(&h) {
+                    (c, x, 0.)
+                } else if (60. ..120.).contains(&h) {
+                    (x, c, 0.)
+                } else if (120. ..180.).contains(&h) {
+                    (0., c, x)
+                } else if (180. ..240.).contains(&h) {
+                    (0., x, c)
+                } else if (240. ..300.).contains(&h) {
+                    (x, 0., c)
+                } else if (300. ..360.).contains(&h) {
+                    (c, 0., x)
+                } else {
+                    unreachable!();
+                };
+
+                Ok(Value::Color(Color::new(((r + m) * 255.) as u8, ((g + m) * 255.) as u8, ((b + m) * 255.) as u8)))
             }
             "vec" => {
                 let args = self.deconstruct_args(
