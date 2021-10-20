@@ -28,7 +28,11 @@ pub enum Node {
 
     /// Assignment to a variable. The `declare` field dictates whether or not this will
     /// declare a new variable in the local scope, or update one in the next scope.
-    Assign { name: String, declare: bool, value: Box<Node> },
+    Assign {
+        name: String,
+        declare: bool,
+        value: Box<Node>,
+    },
 
     /// A for loop.
     For {

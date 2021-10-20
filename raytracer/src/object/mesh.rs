@@ -146,6 +146,7 @@ pub struct Mesh {
     pub material: Material,
     pub texcoords: Vec<(f32, f32)>,
     pub normals: Vec<Vector3>,
+    pub rotation: Matrix,
 }
 
 impl Clone for Mesh {
@@ -157,6 +158,7 @@ impl Clone for Mesh {
             material: self.material.clone(),
             texcoords: self.texcoords.clone(),
             normals: self.normals.clone(),
+            rotation: self.rotation.clone(),
         }
     }
 }
@@ -170,6 +172,7 @@ impl Mesh {
             material,
             texcoords: Vec::new(),
             normals: Vec::new(),
+            rotation: Matrix::default(),
         }
     }
 
@@ -265,6 +268,7 @@ impl Mesh {
             bounding_box: AabbIntersector::default(),
             texcoords,
             normals,
+            rotation: Matrix::default(),
         }
     }
 
@@ -305,6 +309,7 @@ impl Mesh {
 
     pub fn rotate_xyz(&mut self, rot: Vector3) {
         let rot = Matrix::from_euler_xyz(-rot.x, -rot.y, -rot.z);
+        self.rotation = self.rotation * rot;
 
         for tri in self.triangles.iter_mut() {
             tri.v[0] = (rot * Matrix::from(tri.v[0])).pos();
@@ -315,11 +320,12 @@ impl Mesh {
 
     pub fn rotate_zyx(&mut self, rot: Vector3) {
         let rot = Matrix::from_euler_zyx(-rot.x, -rot.y, -rot.z);
+        self.rotation = self.rotation * rot;
 
         for tri in self.triangles.iter_mut() {
-            tri.v[0] = (Matrix::from(tri.v[0]) * rot).pos();
-            tri.v[1] = (Matrix::from(tri.v[1]) * rot).pos();
-            tri.v[2] = (Matrix::from(tri.v[2]) * rot).pos();
+            tri.v[0] = (rot * Matrix::from(tri.v[0])).pos();
+            tri.v[1] = (rot * Matrix::from(tri.v[1])).pos();
+            tri.v[2] = (rot * Matrix::from(tri.v[2])).pos();
         }
     }
 
@@ -352,6 +358,10 @@ impl Mesh {
             pos: center,
             size: max - center,
         };
+
+        for norm in self.normals.iter_mut() {
+            *norm = (self.rotation * Matrix::from(*norm)).pos();
+        }
 
         self.sbvh = Some(acceleration::Sbvh::new(&self.triangles).into());
     }

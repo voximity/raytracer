@@ -160,7 +160,6 @@ type ImageCache = HashMap<String, ImageBuffer<Rgb<u8>, Vec<u8>>>;
 /// scene.
 pub struct Interpreter {
     root: ast::Node,
-    scene: Scene,
     images: ImageCache,
     stack: Vec<Scope>,
     object_names: Vec<String>,
@@ -177,6 +176,7 @@ impl Interpreter {
                 (String::from("PI"), Value::Number(std::f64::consts::PI)),
                 (String::from("TAU"), Value::Number(std::f64::consts::TAU)),
                 (String::from("E"), Value::Number(std::f64::consts::E)),
+                (String::from("t"), Value::Number(0.)),
             ]
             .into_iter()
             .collect(),
@@ -184,11 +184,14 @@ impl Interpreter {
 
         Ok(Interpreter {
             root: AstParser::new(Tokenizer::new(reader).tokenize()?).parse_root()?,
-            scene: Scene::default(),
             images: HashMap::new(),
             stack,
             object_names: Vec::new(),
         })
+    }
+
+    pub fn set_global(&mut self, identifier: String, value: Value) {
+        self.stack[0].0.insert(identifier, value);
     }
 
     /// Start execution of the interpreter.
@@ -203,16 +206,47 @@ impl Interpreter {
         // that receive `&mut self`
         self.root = ast::Node::Root(vec![]);
 
-        // match nodes that can be in the root node
-        self.run_scope(root)?;
+        // instantiate a new scene
+        let mut scene = Scene::default();
 
-        Ok(self.scene)
+        // match nodes that can be in the root node
+        self.run_scope(&mut scene, root)?;
+
+        Ok(scene)
     }
 
-    fn run_scope(&mut self, nodes: Vec<ast::Node>) -> Result<(), InterpretError> {
+    /// Start execution of the interpreter, cloning the root node.
+    /// Use this if you are going to continually reuse the interpreter.
+    pub fn run_cloned(&mut self) -> Result<Scene, InterpretError> {
+        let root = match self.root.clone() {
+            ast::Node::Root(root) => root,
+            _ => unreachable!(),
+        };
+
+        // generate a scene
+        let mut scene = Scene::default();
+
+        // clear object names
+        self.object_names = vec![];
+
+        // execute the scene
+        self.run_scope(&mut scene, root)?;
+
+        Ok(scene)
+    }
+
+    fn run_scope(
+        &mut self,
+        scene: &mut Scene,
+        nodes: Vec<ast::Node>,
+    ) -> Result<(), InterpretError> {
         for node in nodes.into_iter() {
             match node {
-                ast::Node::Assign { name, declare, value } => {
+                ast::Node::Assign {
+                    name,
+                    declare,
+                    value,
+                } => {
                     let value = Value::from_node(self, *value)?;
                     if declare {
                         // set in the top-most stack
@@ -255,7 +289,7 @@ impl Interpreter {
                         ));
 
                         // run the scope body
-                        self.run_scope(body.clone())?;
+                        self.run_scope(scene, body.clone())?;
 
                         // pop the scope from the stack
                         self.stack.pop();
@@ -267,6 +301,24 @@ impl Interpreter {
                 } => {
                     match name.as_str() {
                         // one-time scene properties
+                        "scene" => {
+                            if self.object_names.iter().any(|n| n.as_str() == "scene") {
+                                return Err(InterpretError::NonUniqueObject("scene"));
+                            }
+
+                            let max_ray_depth =
+                                optional_property!(self, properties, "max_ray_depth", Number)
+                                    .map(|f| f as u32);
+                            let ambient = optional_property!(self, properties, "ambient", Color);
+
+                            if let Some(mrd) = max_ray_depth {
+                                scene.options.max_ray_depth = mrd;
+                            }
+
+                            if let Some(ambient) = ambient {
+                                scene.options.ambient = ambient;
+                            }
+                        }
                         "camera" => {
                             if self.object_names.iter().any(|n| n.as_str() == "camera") {
                                 return Err(InterpretError::NonUniqueObject("camera"));
@@ -282,22 +334,22 @@ impl Interpreter {
                             let fov = optional_property!(self, properties, "fov", Number);
 
                             if let Some(vw) = vw {
-                                self.scene.camera.vw = vw;
+                                scene.camera.vw = vw;
                             }
                             if let Some(vh) = vh {
-                                self.scene.camera.vh = vh;
+                                scene.camera.vh = vh;
                             }
                             if let Some(origin) = origin {
-                                self.scene.camera.origin = origin;
+                                scene.camera.origin = origin;
                             }
                             if let Some(yaw) = yaw {
-                                self.scene.camera.yaw = yaw;
+                                scene.camera.yaw = yaw;
                             }
                             if let Some(pitch) = pitch {
-                                self.scene.camera.pitch = pitch;
+                                scene.camera.pitch = pitch;
                             }
                             if let Some(fov) = fov {
-                                self.scene.camera.set_fov(fov);
+                                scene.camera.set_fov(fov);
                             }
                         }
                         "skybox" => {
@@ -308,11 +360,11 @@ impl Interpreter {
                             let t = required_property!(self, properties, "type", String);
 
                             match t.as_str() {
-                                "normal" => self.scene.skybox = Box::new(skybox::Normal),
+                                "normal" => scene.skybox = Box::new(skybox::Normal),
                                 "solid" => {
                                     let color =
                                         required_property!(self, properties, "color", Color);
-                                    self.scene.skybox = Box::new(skybox::Solid(color));
+                                    scene.skybox = Box::new(skybox::Solid(color));
                                 }
                                 "cubemap" => {
                                     let filename =
@@ -326,7 +378,7 @@ impl Interpreter {
                                         }
                                     };
 
-                                    self.scene.skybox = Box::new(skybox::Cubemap::new(img));
+                                    scene.skybox = Box::new(skybox::Cubemap::new(img));
                                 }
                                 _ => return Err(InterpretError::InvalidMaterials),
                             }
@@ -338,7 +390,7 @@ impl Interpreter {
                             let size = required_property!(self, properties, "size", Vector);
                             let material = self.read_material(properties)?;
 
-                            self.scene
+                            scene
                                 .objects
                                 .push(Box::new(object::Aabb::new(pos, size, material)));
                         }
@@ -381,7 +433,7 @@ impl Interpreter {
                             }
 
                             mesh.recalculate();
-                            self.scene.objects.push(Box::new(mesh));
+                            scene.objects.push(Box::new(mesh));
                         }
                         "plane" => {
                             let origin = required_property!(self, properties, "origin", Vector);
@@ -393,7 +445,7 @@ impl Interpreter {
                                 .unwrap_or(1.);
                             let material = self.read_material(properties)?;
 
-                            self.scene.objects.push(Box::new(object::Plane {
+                            scene.objects.push(Box::new(object::Plane {
                                 origin,
                                 normal,
                                 material,
@@ -405,7 +457,7 @@ impl Interpreter {
                             let radius = required_property!(self, properties, "radius", Number);
                             let material = self.read_material(properties)?;
 
-                            self.scene
+                            scene
                                 .objects
                                 .push(Box::new(object::Sphere::new(pos, radius, material)));
                         }
@@ -436,7 +488,7 @@ impl Interpreter {
                                 max_distance: max_distance.unwrap_or(default.max_distance),
                             };
 
-                            self.scene.lights.push(Box::new(light));
+                            scene.lights.push(Box::new(light));
                         }
                         "sun" | "sun_light" | "sunlight" => {
                             let default = lighting::Sun::default();
@@ -467,7 +519,7 @@ impl Interpreter {
                                     .unwrap_or(default.shadow_coefficient),
                             };
 
-                            self.scene.lights.push(Box::new(light));
+                            scene.lights.push(Box::new(light));
                         }
                         _ => return Err(InterpretError::UnknownObject(name.clone())),
                     }
@@ -665,7 +717,11 @@ impl Interpreter {
                     unreachable!();
                 };
 
-                Ok(Value::Color(Color::new(((r + m) * 255.) as u8, ((g + m) * 255.) as u8, ((b + m) * 255.) as u8)))
+                Ok(Value::Color(Color::new(
+                    ((r + m) * 255.) as u8,
+                    ((g + m) * 255.) as u8,
+                    ((b + m) * 255.) as u8,
+                )))
             }
             "vec" => {
                 let args = self.deconstruct_args(
