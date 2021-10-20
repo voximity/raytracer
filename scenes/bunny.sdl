@@ -13,9 +13,9 @@ mesh {
     position: <0, 0, -10>,
     scale: 2,
     rotate_xyz: vec(
-        random(0, mul(pi(), 2)),
-        random(0, mul(pi(), 2)),
-        random(0, mul(pi(), 2))
+        random(0, mul(PI, 2)),
+        random(0, mul(PI, 2)),
+        random(0, mul(PI, 2))
     ),
     material: {
         texture: solid(color(0, 180, 255)),

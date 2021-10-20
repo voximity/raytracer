@@ -55,13 +55,78 @@ pub enum InterpretError {
 
     #[error("no variable defined by the name {0}")]
     UndefinedVariable(String),
+
+    #[error("cannot convert AST node to a definite type")]
+    NonValueNode,
+}
+
+/// A definite value, which has been reduced from
+/// an AST node that was a literal, a call, or a variable.
+#[derive(Debug, Clone)]
+pub enum Value {
+    String(String),
+    Number(f64),
+    Vector(Vector3),
+    Color(Color),
+    Boolean(bool),
+    Dictionary(HashMap<String, Value>),
+}
+
+impl From<Value> for ast::Node {
+    fn from(v: Value) -> Self {
+        match v {
+            Value::String(s) => Self::String(s),
+            Value::Number(n) => Self::Number(n),
+            Value::Vector(v) => Self::Vector(v),
+            Value::Color(c) => Self::Color(c),
+            Value::Boolean(b) => Self::Boolean(b),
+            Value::Dictionary(m) => {
+                Self::Dictionary(m.into_iter().map(|(k, v)| (k, v.into())).collect())
+            }
+        }
+    }
+}
+
+impl Value {
+    fn from_node(interpreter: &Interpreter, node: ast::Node) -> Result<Self, InterpretError> {
+        let value = match node {
+            ast::Node::Identifier(name) => interpreter
+                .variable_value(&name)
+                .ok_or(InterpretError::UndefinedVariable(name))?,
+            ast::Node::Call(name, args) => interpreter.call_func(name, args)?,
+            ast::Node::String(s) => Self::String(s),
+            ast::Node::Number(n) => Self::Number(n),
+            ast::Node::Vector(v) => Self::Vector(v),
+            ast::Node::Color(c) => Self::Color(c),
+            ast::Node::Boolean(b) => Self::Boolean(b),
+            ast::Node::Dictionary(m) => Self::Dictionary(
+                m.into_iter()
+                    .filter_map(|(k, v)| Value::from_node(interpreter, v).ok().map(|v| (k, v)))
+                    .collect(),
+            ),
+            _ => return Err(InterpretError::NonValueNode),
+        };
+
+        Ok(value)
+    }
+
+    fn from_nodes(
+        interpreter: &Interpreter,
+        nodes: Vec<ast::Node>,
+    ) -> Result<Vec<Self>, InterpretError> {
+        let mut values = vec![];
+        for node in nodes.into_iter() {
+            values.push(Value::from_node(interpreter, node)?);
+        }
+        Ok(values)
+    }
 }
 
 macro_rules! optional_property {
     ($self:ident, $properties:ident, $name:literal, $k:ident) => {
         $self
             .optional_property(&mut $properties, $name, ast::NodeKind::$k)?
-            .map(|v| unwrap_variant!(v, ast::Node::$k))
+            .map(|v| unwrap_variant!(v, Value::$k))
     };
 }
 
@@ -85,7 +150,7 @@ macro_rules! unwrap_variant {
 
 /// A scope is a wrapper around a dictionary from identifier
 /// to AST node. The AST node is expected to be fully reduced.
-struct Scope(HashMap<String, ast::Node>);
+struct Scope(HashMap<String, Value>);
 
 /// The image cache, that is, a map between file names and loaded images.
 type ImageCache = HashMap<String, ImageBuffer<Rgb<u8>, Vec<u8>>>;
@@ -106,11 +171,22 @@ impl Interpreter {
     /// as instantiate an `AstParser` and parse the tokenized input. From there, the interpreter
     /// can operate on the root AST node.
     pub fn new<R: Read + Seek>(reader: R) -> Result<Self, InterpretError> {
+        // inject constants into the global namespace
+        let stack = vec![Scope(
+            vec![
+                (String::from("PI"), Value::Number(std::f64::consts::PI)),
+                (String::from("TAU"), Value::Number(std::f64::consts::TAU)),
+                (String::from("E"), Value::Number(std::f64::consts::E)),
+            ]
+            .into_iter()
+            .collect(),
+        )];
+
         Ok(Interpreter {
             root: AstParser::new(Tokenizer::new(reader).tokenize()?).parse_root()?,
             scene: Scene::default(),
             images: HashMap::new(),
-            stack: vec![Scope(HashMap::new())],
+            stack,
             object_names: Vec::new(),
         })
     }
@@ -136,9 +212,28 @@ impl Interpreter {
     fn run_scope(&mut self, nodes: Vec<ast::Node>) -> Result<(), InterpretError> {
         for node in nodes.into_iter() {
             match node {
-                ast::Node::Assign { name, value } => {
-                    let reduced = self.reduce_calls(vec![*value])?.into_iter().next().unwrap();
-                    self.stack.last_mut().unwrap().0.insert(name, reduced);
+                ast::Node::Assign { name, declare, value } => {
+                    let value = Value::from_node(self, *value)?;
+                    if declare {
+                        // set in the top-most stack
+                        self.stack.last_mut().unwrap().0.insert(name, value);
+                    } else {
+                        // assign to existing variable in nearest scope, or
+                        // set it globally
+                        for (i, scope) in self.stack.iter_mut().enumerate().rev() {
+                            match scope.0.entry(name.clone()) {
+                                Entry::Occupied(mut ent) => {
+                                    ent.insert(value);
+                                    break;
+                                }
+                                Entry::Vacant(ent) if i == 0 => {
+                                    ent.insert(value);
+                                    break;
+                                }
+                                _ => (),
+                            }
+                        }
+                    }
                 }
                 ast::Node::For {
                     var,
@@ -146,21 +241,15 @@ impl Interpreter {
                     to,
                     body,
                 } => {
-                    let from = unwrap_variant!(
-                        self.reduce_calls(vec![*from])?.into_iter().next().unwrap(),
-                        ast::Node::Number
-                    )
-                    .floor() as i32;
-                    let to = unwrap_variant!(
-                        self.reduce_calls(vec![*to])?.into_iter().next().unwrap(),
-                        ast::Node::Number
-                    )
-                    .floor() as i32;
+                    let from = unwrap_variant!(Value::from_node(self, *from)?, Value::Number)
+                        .floor() as i32;
+                    let to =
+                        unwrap_variant!(Value::from_node(self, *to)?, Value::Number).floor() as i32;
 
                     for i in from..to {
                         // push a new scope to the stack with the index variable
                         self.stack.push(Scope(
-                            vec![(var.clone(), ast::Node::Number(i as f64))]
+                            vec![(var.clone(), Value::Number(i as f64))]
                                 .into_iter()
                                 .collect(),
                         ));
@@ -244,7 +333,7 @@ impl Interpreter {
                         }
 
                         // objects
-                        "aabb" => {
+                        "aabb" | "box" => {
                             let pos = required_property!(self, properties, "position", Vector);
                             let size = required_property!(self, properties, "size", Vector);
                             let material = self.read_material(properties)?;
@@ -429,24 +518,32 @@ impl Interpreter {
         match node {
             ast::Node::Call(name, args) => match name.as_str() {
                 "solid" => {
-                    let args = self.deconstruct_args(args, &[ast::NodeKind::Color])?;
-                    Ok(Texture::Solid(unwrap_variant!(args[0], ast::Node::Color)))
+                    let args = self.deconstruct_args(
+                        Value::from_nodes(self, args)?,
+                        &[ast::NodeKind::Color],
+                    )?;
+                    Ok(Texture::Solid(unwrap_variant!(args[0], Value::Color)))
                 }
                 "checkerboard" => {
-                    let args =
-                        self.deconstruct_args(args, &[ast::NodeKind::Color, ast::NodeKind::Color])?;
+                    let args = self.deconstruct_args(
+                        Value::from_nodes(self, args)?,
+                        &[ast::NodeKind::Color, ast::NodeKind::Color],
+                    )?;
 
                     Ok(Texture::Checkerboard(
-                        unwrap_variant!(args[0], ast::Node::Color),
-                        unwrap_variant!(args[1], ast::Node::Color),
+                        unwrap_variant!(args[0], Value::Color),
+                        unwrap_variant!(args[1], Value::Color),
                     ))
                 }
                 "image" => {
-                    let args = self.deconstruct_args(args, &[ast::NodeKind::String])?;
+                    let args = self.deconstruct_args(
+                        Value::from_nodes(self, args)?,
+                        &[ast::NodeKind::String],
+                    )?;
 
                     match self.images.entry(unwrap_variant!(
                         args.into_iter().next().unwrap(),
-                        ast::Node::String
+                        Value::String
                     )) {
                         Entry::Occupied(buf) => Ok(Texture::Image(buf.get().clone())),
                         Entry::Vacant(ent) => {
@@ -462,50 +559,23 @@ impl Interpreter {
         }
     }
 
-    /// Take an array of arg nodes, and if any of them are `Call`s,
-    /// perform the function execution and flatten.
-    fn reduce_calls(&mut self, args: Vec<ast::Node>) -> Result<Vec<ast::Node>, InterpretError> {
-        let mut out = vec![];
-
-        for mut arg in args.into_iter() {
-            if let ast::Node::Identifier(name) = arg {
-                arg = match self.variable_value(&name) {
-                    Some(value) => value,
-                    None => return Err(InterpretError::UndefinedVariable(name)),
-                };
-            }
-
-            while let ast::Node::Call(name, a) = arg {
-                arg = self.call_func(name, a)?;
-            }
-
-            out.push(arg);
-        }
-
-        Ok(out)
-    }
-
     /// Call a named function with some arguments.
     /// Its result is another node that can be used as other values.
-    fn call_func(
-        &mut self,
-        name: String,
-        mut args: Vec<ast::Node>,
-    ) -> Result<ast::Node, InterpretError> {
-        args = self.reduce_calls(args)?;
+    fn call_func(&self, name: String, args: Vec<ast::Node>) -> Result<Value, InterpretError> {
+        let values = Value::from_nodes(self, args)?;
 
         // float operations
         macro_rules! op {
             ($op:tt) => {
                 {
-                    match args.get(0) {
-                        Some(ast::Node::Number(_)) => {
-                            let args = self.deconstruct_args(args, &[ast::NodeKind::Number, ast::NodeKind::Number])?;
-                            Ok(ast::Node::Number(unwrap_variant!(args[0], ast::Node::Number) $op unwrap_variant!(args[1], ast::Node::Number)))
+                    match values.get(0) {
+                        Some(Value::Number(_)) => {
+                            let args = self.deconstruct_args(values, &[ast::NodeKind::Number, ast::NodeKind::Number])?;
+                            Ok(Value::Number(unwrap_variant!(args[0], Value::Number) $op unwrap_variant!(args[1], Value::Number)))
                         }
-                        Some(ast::Node::Vector(_)) => {
-                            let args = self.deconstruct_args(args, &[ast::NodeKind::Vector, ast::NodeKind::Vector])?;
-                            Ok(ast::Node::Vector(unwrap_variant!(args[0], ast::Node::Vector) $op unwrap_variant!(args[1], ast::Node::Vector)))
+                        Some(Value::Vector(_)) => {
+                            let args = self.deconstruct_args(values, &[ast::NodeKind::Vector, ast::NodeKind::Vector])?;
+                            Ok(Value::Vector(unwrap_variant!(args[0], Value::Vector) $op unwrap_variant!(args[1], Value::Vector)))
                         }
                         _ => return Err(InterpretError::InvalidCallArgs),
                     }
@@ -515,26 +585,22 @@ impl Interpreter {
 
         macro_rules! float_func {
             ($n:ident) => {{
-                let args = self.deconstruct_args(args, &[ast::NodeKind::Number])?;
-                Ok(ast::Node::Number(
-                    unwrap_variant!(args[0], ast::Node::Number).$n(),
-                ))
+                let args = self.deconstruct_args(values, &[ast::NodeKind::Number])?;
+                Ok(Value::Number(unwrap_variant!(args[0], Value::Number).$n()))
             }};
         }
 
         macro_rules! vector_func {
             ($n:ident, $return:ident) => {{
-                let args = self.deconstruct_args(args, &[ast::NodeKind::Vector])?;
-                Ok(ast::Node::$return(
-                    unwrap_variant!(args[0], ast::Node::Vector).$n(),
-                ))
+                let args = self.deconstruct_args(values, &[ast::NodeKind::Vector])?;
+                Ok(Value::$return(unwrap_variant!(args[0], Value::Vector).$n()))
             }};
             ($n:ident, $return:ident,) => {{
                 let args =
-                    self.deconstruct_args(args, &[ast::NodeKind::Vector, ast::NodeKind::Vector])?;
-                Ok(ast::Node::$return(
-                    unwrap_variant!(args[0], ast::Node::Vector)
-                        .$n(unwrap_variant!(args[1], ast::Node::Vector)),
+                    self.deconstruct_args(values, &[ast::NodeKind::Vector, ast::NodeKind::Vector])?;
+                Ok(Value::$return(
+                    unwrap_variant!(args[0], Value::Vector)
+                        .$n(unwrap_variant!(args[1], Value::Vector)),
                 ))
             }};
         }
@@ -549,7 +615,7 @@ impl Interpreter {
             // constructors
             "color" => {
                 let args = self.deconstruct_args(
-                    args,
+                    values,
                     &[
                         ast::NodeKind::Number,
                         ast::NodeKind::Number,
@@ -557,25 +623,25 @@ impl Interpreter {
                     ],
                 )?;
 
-                Ok(ast::Node::Color(Color::new(
-                    unwrap_variant!(args[0], ast::Node::Number) as u8,
-                    unwrap_variant!(args[1], ast::Node::Number) as u8,
-                    unwrap_variant!(args[2], ast::Node::Number) as u8,
+                Ok(Value::Color(Color::new(
+                    unwrap_variant!(args[0], Value::Number) as u8,
+                    unwrap_variant!(args[1], Value::Number) as u8,
+                    unwrap_variant!(args[2], Value::Number) as u8,
                 )))
             }
             "vec" => {
                 let args = self.deconstruct_args(
-                    args,
+                    values,
                     &[
                         ast::NodeKind::Number,
                         ast::NodeKind::Number,
                         ast::NodeKind::Number,
                     ],
                 )?;
-                Ok(ast::Node::Vector(Vector3::new(
-                    unwrap_variant!(args[0], ast::Node::Number),
-                    unwrap_variant!(args[1], ast::Node::Number),
-                    unwrap_variant!(args[2], ast::Node::Number),
+                Ok(Value::Vector(Vector3::new(
+                    unwrap_variant!(args[0], Value::Number),
+                    unwrap_variant!(args[1], Value::Number),
+                    unwrap_variant!(args[2], Value::Number),
                 )))
             }
 
@@ -589,12 +655,14 @@ impl Interpreter {
             "abs" => float_func!(abs),
             "floor" => float_func!(floor),
             "ceil" => float_func!(ceil),
+            "rad" => float_func!(to_radians),
+            "deg" => float_func!(to_degrees),
             "random" => {
                 let args =
-                    self.deconstruct_args(args, &[ast::NodeKind::Number, ast::NodeKind::Number])?;
-                Ok(ast::Node::Number(rand::thread_rng().gen_range(
-                    unwrap_variant!(args[0], ast::Node::Number)
-                        ..=unwrap_variant!(args[1], ast::Node::Number),
+                    self.deconstruct_args(values, &[ast::NodeKind::Number, ast::NodeKind::Number])?;
+                Ok(Value::Number(rand::thread_rng().gen_range(
+                    unwrap_variant!(args[0], Value::Number)
+                        ..=unwrap_variant!(args[1], Value::Number),
                 )))
             }
 
@@ -603,19 +671,16 @@ impl Interpreter {
             "magnitude" => vector_func!(magnitude, Number),
             "angle" => vector_func!(angle, Number,),
 
-            // constants
-            "pi" => Ok(ast::Node::Number(std::f64::consts::PI)),
-
             _ => Err(InterpretError::UnknownFunction(name)),
         }
     }
 
     /// Deconstruct a list of arguments based on `NodeKind`s.
     fn deconstruct_args(
-        &mut self,
-        args: Vec<ast::Node>,
+        &self,
+        args: Vec<Value>,
         dest: &[ast::NodeKind],
-    ) -> Result<Vec<ast::Node>, InterpretError> {
+    ) -> Result<Vec<Value>, InterpretError> {
         // first, confirm that both lengths are identical
         if args.len() != dest.len() {
             return Err(InterpretError::InvalidArgCount(dest.len(), args.len()));
@@ -623,46 +688,25 @@ impl Interpreter {
 
         let mut out = Vec::new();
 
-        // now iterate through each dest arg and compare with the arg we have
-        for (node_kind, mut node) in dest.into_iter().zip(args.into_iter()) {
-            // continuously call any functions until we have a non-call value
-            while let ast::Node::Call(name, args) = node {
-                node = self.call_func(name, args)?;
+        macro_rules! match_kinds {
+            ($nk:ident, $v:ident, $o:ident, $($t:ident),+,) => {
+                match $nk {
+                    $(
+                        ast::NodeKind::$t => {
+                            if matches!($v, Value::$t(_)) {
+                                $o.push($v)
+                            }
+                        }
+                    ),+
+                }
             }
+        }
 
-            // now, we can compare node_kind with node
-            match node_kind {
-                ast::NodeKind::Boolean => {
-                    if matches!(node, ast::Node::Boolean(_)) {
-                        out.push(node)
-                    }
-                }
-                ast::NodeKind::Color => {
-                    if matches!(node, ast::Node::Color(_)) {
-                        out.push(node)
-                    }
-                }
-                ast::NodeKind::Dictionary => {
-                    if matches!(node, ast::Node::Dictionary(_)) {
-                        out.push(node)
-                    }
-                }
-                ast::NodeKind::Number => {
-                    if matches!(node, ast::Node::Number(_)) {
-                        out.push(node)
-                    }
-                }
-                ast::NodeKind::String => {
-                    if matches!(node, ast::Node::String(_)) {
-                        out.push(node)
-                    }
-                }
-                ast::NodeKind::Vector => {
-                    if matches!(node, ast::Node::Vector(_)) {
-                        out.push(node)
-                    }
-                }
-            }
+        // now iterate through each dest arg and compare with the arg we have
+        for (node_kind, value) in dest.into_iter().zip(args.into_iter()) {
+            match_kinds!(
+                node_kind, value, out, Boolean, Color, Dictionary, Number, String, Vector,
+            );
         }
 
         // we return `args` again if and only if they match the intended destination
@@ -676,65 +720,27 @@ impl Interpreter {
         properties: &mut HashMap<String, ast::Node>,
         name: &'static str,
         kind: ast::NodeKind,
-    ) -> Result<Option<ast::Node>, InterpretError> {
+    ) -> Result<Option<Value>, InterpretError> {
+        macro_rules! match_kinds {
+            ($nk:ident, $v:ident, $($t:ident),+,) => {
+                match $nk {
+                    $(
+                        ast::NodeKind::$t => {
+                            if matches!($v, Value::$t(_)) {
+                                Ok(Some($v))
+                            } else {
+                                Err(InterpretError::InvalidCallArgs)
+                            }
+                        }
+                    ),+
+                }
+            }
+        }
+
         match properties.remove(name) {
-            Some(mut node) => {
-                // continuously call any functions until we have a non-call value
-                if let ast::Node::Identifier(name) = node {
-                    node = match self.variable_value(&name) {
-                        Some(value) => value,
-                        None => return Err(InterpretError::UndefinedVariable(name)),
-                    };
-                }
-
-                while let ast::Node::Call(name, args) = node {
-                    node = self.call_func(name, args)?;
-                }
-
-                match kind {
-                    ast::NodeKind::Boolean => {
-                        if matches!(node, ast::Node::Boolean(_)) {
-                            Ok(Some(node))
-                        } else {
-                            return Err(InterpretError::InvalidCallArgs);
-                        }
-                    }
-                    ast::NodeKind::Color => {
-                        if matches!(node, ast::Node::Color(_)) {
-                            Ok(Some(node))
-                        } else {
-                            return Err(InterpretError::InvalidCallArgs);
-                        }
-                    }
-                    ast::NodeKind::Dictionary => {
-                        if matches!(node, ast::Node::Dictionary(_)) {
-                            Ok(Some(node))
-                        } else {
-                            return Err(InterpretError::InvalidCallArgs);
-                        }
-                    }
-                    ast::NodeKind::Number => {
-                        if matches!(node, ast::Node::Number(_)) {
-                            Ok(Some(node))
-                        } else {
-                            return Err(InterpretError::InvalidCallArgs);
-                        }
-                    }
-                    ast::NodeKind::String => {
-                        if matches!(node, ast::Node::String(_)) {
-                            Ok(Some(node))
-                        } else {
-                            return Err(InterpretError::InvalidCallArgs);
-                        }
-                    }
-                    ast::NodeKind::Vector => {
-                        if matches!(node, ast::Node::Vector(_)) {
-                            Ok(Some(node))
-                        } else {
-                            return Err(InterpretError::InvalidCallArgs);
-                        }
-                    }
-                }
+            Some(node) => {
+                let value = Value::from_node(self, node)?;
+                match_kinds!(kind, value, Boolean, Color, Dictionary, Number, String, Vector,)
             }
             None => Ok(None),
         }
@@ -742,7 +748,7 @@ impl Interpreter {
 
     /// Gets the value of a variable, somewhere along the stack, moving backwards.
     /// This clones the value of the variable.
-    fn variable_value(&mut self, identifier: &String) -> Option<ast::Node> {
+    fn variable_value(&self, identifier: &String) -> Option<Value> {
         for scope in self.stack.iter().rev() {
             if let Some(value) = scope.0.get(identifier) {
                 return Some(value.to_owned());

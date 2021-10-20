@@ -26,8 +26,9 @@ pub enum Node {
         properties: HashMap<String, Node>,
     },
 
-    /// Assignment to a variable.
-    Assign { name: String, value: Box<Node> },
+    /// Assignment to a variable. The `declare` field dictates whether or not this will
+    /// declare a new variable in the local scope, or update one in the next scope.
+    Assign { name: String, declare: bool, value: Box<Node> },
 
     /// A for loop.
     For {
@@ -154,6 +155,27 @@ impl AstParser {
 
                             continue;
                         }
+                        "let" => {
+                            let ident = match self.next()? {
+                                Token::Identifier(i) => i,
+                                t => {
+                                    return Err(AstError::UnexpectedToken(
+                                        "an identifier".into(),
+                                        t,
+                                    ))
+                                }
+                            };
+
+                            self.read_expecting(Token::Op(Op::Assign))?;
+
+                            nodes.push(Node::Assign {
+                                name: ident,
+                                declare: true,
+                                value: Box::new(self.parse_value()?),
+                            });
+
+                            continue;
+                        }
                         _ => (),
                     }
 
@@ -162,6 +184,7 @@ impl AstParser {
                             self.tokens.next();
                             nodes.push(Node::Assign {
                                 name: identifier,
+                                declare: false,
                                 value: Box::new(self.parse_value()?),
                             })
                         }

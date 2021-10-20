@@ -24,6 +24,25 @@ As far as values go, there are a few primitive types:
 * Colors, which are constructed with the familiar function call syntax `color(r, g, b)`, where r, g, and b are numbers from 0-255
 * Dictionaries, which are constructed much like JSON objects. They are wrapped in curly braces and are a collection of comma-separated key-values, like `{key: value, another_key: another_value}`
 
+## Variables
+
+In any scope, variables can be set simply with the syntax `identifer = value`, like `tau = mul(PI, 2)`.
+Local variables can be declared by prefixing the keyword `let`, i.e. `let y = mul(2, x)`. Variables can
+be updated in scopes of the same or greater depth by omitting the `let` keyword.
+
+Later, the variable can be used in dictionaries as values, as function arguments, and so on.
+
+Variables declared in nested scopes are *always* local. Variables declared in a nested scope
+will shadow variables of the same name in a higher scope.
+
+## Constants
+
+A few constants are provided, such as
+
+* `PI` is pi
+* `TAU` is double pi
+* `E` is Euler's constant
+
 ## Functions
 
 There are a number of functions that can be used as values.
@@ -37,7 +56,8 @@ There are a number of functions that can be used as values.
 
 #### Constructors
 
-* `vec(x, y, z)` constructs a vector from 3 numbers (this is useful as syntax like `<pi(), pi(), pi()>` is not supported. instead, prefer `vec(pi(), pi(), pi())`)
+* `vec(x, y, z)` constructs a vector from 3 numbers (this is useful as syntax like `<PI, PI, PI>` is not supported. instead, prefer `vec(PI, PI, PI)`)
+* `color(r, g, b)` constructs a color from 3 numbers (each 0-255)
 
 #### Floating point functions
 
@@ -46,6 +66,8 @@ There are a number of functions that can be used as values.
 * `abs(x)` returns the absolute value of x
 * `floor(x)` returns the floor of x
 * `ceil(y)` returns the ceiling of y
+* `rad(x)` returns x, converted from degrees to radians
+* `deg(x)` returns x, converted from radians to degrees
 * `random(x, y)` returns a random floating point number between `x` and `y`, inclusive
 
 #### Vector functions
@@ -53,10 +75,6 @@ There are a number of functions that can be used as values.
 * `normalize(v)` returns a normalized v
 * `magnitude(v)` returns the magnitude of v
 * `angle(a, b)` returns the angle between vectors a and b
-
-#### Constants
-
-* `pi()` returns 3.141592653...
 
 ### Objects
 
@@ -72,7 +90,7 @@ the form:
 There are a collection of valid object names, like
 
 * `camera`, used to define the camera transform and viewport\*
-* `aabb`, an object that is an axis-aligned bounding box
+* `aabb` or `box`, an object that is an axis-aligned bounding box
 * `mesh`, an object that can be loaded from an `obj` file and is a mesh
 * `plane`, an object that is a plane
 * `sphere`, an object that is a sphere

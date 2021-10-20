@@ -1,14 +1,18 @@
-tau = mul(pi(), 2)
-segments = 16
+let segments = 16
+
+camera {
+    vw: 1920,
+    vh: 1080,
+}
 
 sun {
     vector: <-0.8, -1, -0.2>,
 }
 
 for i in 0 to segments {
-    frac = div(i, segments)
-    inner = mul(frac, tau)
-    color_channel = mul(frac, 255)
+    let frac = div(i, segments)
+    let inner = mul(frac, TAU)
+    let color_channel = mul(frac, 255)
 
     sphere {
         position: vec(cos(inner), sin(inner), -4),
