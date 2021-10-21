@@ -291,7 +291,7 @@ expression parser, streamlined the vector constructor, and added time parameteri
 The SDL can now generate a sequence of PNGs, and then you can use a tool like FFmpeg to convert these
 to a coherent GIF. Here is a coherent GIF below generated from the adjacent code:
 
-![Progress animation from 10/20/2021](/images/readme/10_20_2021.png)
+![Progress animation from 10/20/2021](/images/readme/10_20_2021.gif)
 
 ```
 # Some variables for quick customization. We insert them into our camera...
