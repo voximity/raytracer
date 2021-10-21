@@ -14,7 +14,7 @@ skybox {
 let dist = 3
 let radius = 0.5
 let n = 24
-let time_scale = PI / 8
+let time_scale = PI / 32
 
 # Add a basic sun light...
 sun {

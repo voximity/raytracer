@@ -4,11 +4,12 @@ use std::{
 };
 
 use image::{ImageBuffer, Rgb};
+use lazy_static::lazy_static;
 use rand::Rng;
 use raytracer::{
     lighting,
     material::{Color, Material, Texture},
-    math::Vector3,
+    math::{Lerp, Vector3},
     object,
     scene::Scene,
     skybox,
@@ -16,7 +17,8 @@ use raytracer::{
 use thiserror::Error;
 
 use crate::{
-    ast::{self, AstError, AstParser},
+    ast::{self, AstError, AstParser, NodeKind},
+    function::Function,
     tokenize::{TokenizeError, Tokenizer},
 };
 
@@ -175,6 +177,20 @@ impl Value {
             values.push(Value::from_node(interpreter, node)?);
         }
         Ok(values)
+    }
+}
+
+impl PartialEq<ast::NodeKind> for Value {
+    fn eq(&self, other: &ast::NodeKind) -> bool {
+        match (self, other) {
+            (Self::Dictionary(_), ast::NodeKind::Dictionary) => true,
+            (Self::String(_), ast::NodeKind::String) => true,
+            (Self::Number(_), ast::NodeKind::Number) => true,
+            (Self::Vector(_), ast::NodeKind::Vector) => true,
+            (Self::Color(_), ast::NodeKind::Color) => true,
+            (Self::Boolean(_), ast::NodeKind::Boolean) => true,
+            _ => false,
+        }
     }
 }
 
@@ -644,159 +660,139 @@ impl Interpreter {
     /// Call a named function with some arguments.
     /// Its result is another node that can be used as other values.
     fn call_func(&self, name: String, args: Vec<ast::Node>) -> Result<Value, InterpretError> {
-        let values = Value::from_nodes(self, args)?;
-
-        // float operations
-        macro_rules! op {
-            ($op:tt) => {
-                {
-                    match values.get(0) {
-                        Some(Value::Number(_)) => {
-                            let args = self.deconstruct_args(values, &[ast::NodeKind::Number, ast::NodeKind::Number])?;
-                            Ok(Value::Number(unwrap_variant!(args[0], Value::Number) $op unwrap_variant!(args[1], Value::Number)))
-                        }
-                        Some(Value::Vector(_)) => {
-                            let args = self.deconstruct_args(values, &[ast::NodeKind::Vector, ast::NodeKind::Vector])?;
-                            Ok(Value::Vector(unwrap_variant!(args[0], Value::Vector) $op unwrap_variant!(args[1], Value::Vector)))
-                        }
-                        _ => return Err(InterpretError::InvalidCallArgs),
-                    }
-                }
-            }
-        }
-
         macro_rules! float_func {
-            ($n:ident) => {{
-                let args = self.deconstruct_args(values, &[ast::NodeKind::Number])?;
-                Ok(Value::Number(unwrap_variant!(args[0], Value::Number).$n()))
-            }};
+            ($n:ident) => {
+                |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number).$n()))
+            };
         }
 
         macro_rules! vector_func {
-            ($n:ident, $return:ident) => {{
-                let args = self.deconstruct_args(values, &[ast::NodeKind::Vector])?;
-                Ok(Value::$return(unwrap_variant!(args[0], Value::Vector).$n()))
-            }};
-            ($n:ident, $return:ident,) => {{
-                let args =
-                    self.deconstruct_args(values, &[ast::NodeKind::Vector, ast::NodeKind::Vector])?;
-                Ok(Value::$return(
-                    unwrap_variant!(args[0], Value::Vector)
-                        .$n(unwrap_variant!(args[1], Value::Vector)),
-                ))
-            }};
+            ($n:ident, $r:ident) => {
+                |v| Ok(Value::$r(unwrap_variant!(v[0], Value::Vector).$n()))
+            };
+            ($n:ident, $r:ident,) => {
+                |v| {
+                    Ok(Value::$r(
+                        unwrap_variant!(v[0], Value::Vector)
+                            .$n(unwrap_variant!(v[1], Value::Vector)),
+                    ))
+                }
+            };
         }
 
-        match name.as_str() {
-            // operations
-            "add" => op!(+),
-            "sub" => op!(-),
-            "mul" => op!(*),
-            "div" => op!(/),
+        lazy_static! {
+            static ref FUNCTIONS: Vec<Function> = vec![
+                // floating point operators
+                Function::new(&["add"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) + unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["sub"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) - unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["mul"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) * unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["div"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) / unwrap_variant!(v[1], Value::Number)))),
 
-            // constructors
-            "color" | "rgb" => {
-                let args = self.deconstruct_args(
-                    values,
-                    &[
-                        ast::NodeKind::Number,
-                        ast::NodeKind::Number,
-                        ast::NodeKind::Number,
-                    ],
-                )?;
+                // vector operators
+                Function::new(&["add"], &[NodeKind::Vector, NodeKind::Vector], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) + unwrap_variant!(v[1], Value::Vector)))),
+                Function::new(&["sub"], &[NodeKind::Vector, NodeKind::Vector], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) - unwrap_variant!(v[1], Value::Vector)))),
+                Function::new(&["mul"], &[NodeKind::Vector, NodeKind::Vector], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) * unwrap_variant!(v[1], Value::Vector)))),
+                Function::new(&["div"], &[NodeKind::Vector, NodeKind::Vector], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) / unwrap_variant!(v[1], Value::Vector)))),
 
-                Ok(Value::Color(Color::new(
-                    unwrap_variant!(args[0], Value::Number) as u8,
-                    unwrap_variant!(args[1], Value::Number) as u8,
-                    unwrap_variant!(args[2], Value::Number) as u8,
-                )))
-            }
-            "hsv" => {
-                let args = self.deconstruct_args(
-                    values,
-                    &[
-                        ast::NodeKind::Number,
-                        ast::NodeKind::Number,
-                        ast::NodeKind::Number,
-                    ],
-                )?;
+                // vector (*|/) floating point
+                Function::new(&["mul"], &[NodeKind::Vector, NodeKind::Number], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) * unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["div"], &[NodeKind::Vector, NodeKind::Number], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) / unwrap_variant!(v[1], Value::Number)))),
 
-                let (h, s, v) = (
-                    unwrap_variant!(args[0], Value::Number) % 360.,
-                    unwrap_variant!(args[1], Value::Number),
-                    unwrap_variant!(args[2], Value::Number),
-                );
+                // string operators
+                Function::new(&["add"], &[NodeKind::String, NodeKind::String], |v| Ok(Value::String(format!("{}{}", unwrap_variant!(&v[0], Value::String), unwrap_variant!(&v[1], Value::String))))),
 
-                let c = v * s;
-                let x = c * (1. - (h / 60. % 2. - 1.).abs());
-                let m = v - c;
+                // constructors
+                Function::new(&["color", "rgb"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |v| {
+                    Ok(Value::Color(Color::new(
+                        unwrap_variant!(v[0], Value::Number) as u8,
+                        unwrap_variant!(v[1], Value::Number) as u8,
+                        unwrap_variant!(v[2], Value::Number) as u8,
+                    )))
+                }),
+                Function::new(&["hsv"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |v| {
+                    let (h, s, v) = (
+                        unwrap_variant!(v[0], Value::Number) % 360.,
+                        unwrap_variant!(v[1], Value::Number),
+                        unwrap_variant!(v[2], Value::Number),
+                    );
 
-                let (r, g, b) = if (0. ..60.).contains(&h) {
-                    (c, x, 0.)
-                } else if (60. ..120.).contains(&h) {
-                    (x, c, 0.)
-                } else if (120. ..180.).contains(&h) {
-                    (0., c, x)
-                } else if (180. ..240.).contains(&h) {
-                    (0., x, c)
-                } else if (240. ..300.).contains(&h) {
-                    (x, 0., c)
-                } else if (300. ..360.).contains(&h) {
-                    (c, 0., x)
-                } else {
-                    unreachable!();
-                };
+                    let c = v * s;
+                    let x = c * (1. - (h / 60. % 2. - 1.).abs());
+                    let m = v - c;
 
-                Ok(Value::Color(Color::new(
-                    ((r + m) * 255.) as u8,
-                    ((g + m) * 255.) as u8,
-                    ((b + m) * 255.) as u8,
-                )))
-            }
-            "vec" => {
-                let args = self.deconstruct_args(
-                    values,
-                    &[
-                        ast::NodeKind::Number,
-                        ast::NodeKind::Number,
-                        ast::NodeKind::Number,
-                    ],
-                )?;
-                Ok(Value::Vector(Vector3::new(
-                    unwrap_variant!(args[0], Value::Number),
-                    unwrap_variant!(args[1], Value::Number),
-                    unwrap_variant!(args[2], Value::Number),
-                )))
-            }
+                    let (r, g, b) = if (0. ..60.).contains(&h) {
+                        (c, x, 0.)
+                    } else if (60. ..120.).contains(&h) {
+                        (x, c, 0.)
+                    } else if (120. ..180.).contains(&h) {
+                        (0., c, x)
+                    } else if (180. ..240.).contains(&h) {
+                        (0., x, c)
+                    } else if (240. ..300.).contains(&h) {
+                        (x, 0., c)
+                    } else if (300. ..360.).contains(&h) {
+                        (c, 0., x)
+                    } else {
+                        unreachable!();
+                    };
 
-            // floating point functions
-            "sin" => float_func!(sin),
-            "cos" => float_func!(cos),
-            "tan" => float_func!(tan),
-            "asin" => float_func!(asin),
-            "acos" => float_func!(acos),
-            "atan" => float_func!(atan),
-            "abs" => float_func!(abs),
-            "floor" => float_func!(floor),
-            "ceil" => float_func!(ceil),
-            "rad" => float_func!(to_radians),
-            "deg" => float_func!(to_degrees),
-            "random" => {
-                let args =
-                    self.deconstruct_args(values, &[ast::NodeKind::Number, ast::NodeKind::Number])?;
-                Ok(Value::Number(rand::thread_rng().gen_range(
-                    unwrap_variant!(args[0], Value::Number)
-                        ..=unwrap_variant!(args[1], Value::Number),
-                )))
-            }
+                    Ok(Value::Color(Color::new(
+                        ((r + m) * 255.) as u8,
+                        ((g + m) * 255.) as u8,
+                        ((b + m) * 255.) as u8,
+                    )))
+                }),
 
-            // vector functions
-            "normalize" => vector_func!(normalize, Vector),
-            "magnitude" => vector_func!(magnitude, Number),
-            "angle" => vector_func!(angle, Number,),
+                // floating point functions
+                Function::new(&["sin"], &[NodeKind::Number], float_func!(sin)),
+                Function::new(&["cos"], &[NodeKind::Number], float_func!(cos)),
+                Function::new(&["tan"], &[NodeKind::Number], float_func!(tan)),
+                Function::new(&["asin"], &[NodeKind::Number], float_func!(asin)),
+                Function::new(&["acos"], &[NodeKind::Number], float_func!(acos)),
+                Function::new(&["atan"], &[NodeKind::Number], float_func!(atan)),
+                Function::new(&["abs"], &[NodeKind::Number], float_func!(abs)),
+                Function::new(&["floor"], &[NodeKind::Number], float_func!(floor)),
+                Function::new(&["ceil"], &[NodeKind::Number], float_func!(ceil)),
+                Function::new(&["rad"], &[NodeKind::Number], float_func!(to_radians)),
+                Function::new(&["deg"], &[NodeKind::Number], float_func!(to_degrees)),
+                Function::new(&["random"], &[NodeKind::Number, NodeKind::Number], |v| {
+                    Ok(Value::Number(rand::thread_rng().gen_range(
+                        unwrap_variant!(v[0], Value::Number)
+                            ..=unwrap_variant!(v[1], Value::Number),
+                    )))
+                }),
+                Function::new(&["lerp"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |v| {
+                    Ok(Value::Number(Lerp::lerp(
+                        unwrap_variant!(v[0], Value::Number),
+                        unwrap_variant!(v[1], Value::Number),
+                        unwrap_variant!(v[2], Value::Number),
+                    )))
+                }),
 
-            _ => Err(InterpretError::UnknownFunction(name)),
+                // vector functions
+                Function::new(&["normalize"], &[NodeKind::Vector], vector_func!(normalize, Vector)),
+                Function::new(&["magnitude"], &[NodeKind::Vector], vector_func!(magnitude, Number)),
+                Function::new(&["angle"], &[NodeKind::Vector], vector_func!(angle, Number,)),
+                Function::new(&["lerp"], &[NodeKind::Vector, NodeKind::Vector, NodeKind::Number], |v| {
+                    Ok(Value::Vector(
+                        unwrap_variant!(v[0], Value::Vector).lerp(
+                            unwrap_variant!(v[1], Value::Vector),
+                            unwrap_variant!(v[2], Value::Number),
+                        ))
+                    )
+                }),
+            ];
         }
+
+        let values = Value::from_nodes(self, args)?;
+
+        for func in FUNCTIONS.iter().filter(|f| f.names.contains(&name.as_str())) {
+            if let Some(r) = func.try_eval(values.clone()) {
+                return r;
+            }
+        }
+
+        return Err(InterpretError::UnknownFunction(name));
     }
 
     /// Deconstruct a list of arguments based on `NodeKind`s.

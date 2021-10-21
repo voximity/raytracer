@@ -65,7 +65,8 @@ I'd like to add in the future:
 - [ ] Global illumination *(possibly)*
 - [ ] Caustics *(possibly, an extremely tricky subject)*
 - [x] A scene description method
-  - [ ] Loops
+  - [x] Variables
+  - [x] Loops
   - [x] Functions
 
 ## Progress

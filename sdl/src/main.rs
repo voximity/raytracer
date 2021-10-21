@@ -11,6 +11,7 @@ use notify::Watcher;
 use crate::interpret::{InterpretError, Interpreter, Value};
 
 mod ast;
+mod function;
 mod interpret;
 mod tokenize;
 

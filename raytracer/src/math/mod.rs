@@ -30,6 +30,12 @@ pub trait Lerp {
     fn lerp(self, other: Self, t: f64) -> Self;
 }
 
+impl Lerp for f64 {
+    fn lerp(self, other: Self, t: f64) -> Self {
+        lerp(self, other, t)
+    }
+}
+
 /// An axis.
 #[derive(Debug, Clone, Copy)]
 pub enum Axis {
