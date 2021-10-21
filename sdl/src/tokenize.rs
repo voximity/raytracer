@@ -18,8 +18,12 @@ pub enum TokenizeError {
 }
 
 /// An operator.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Op {
+    Add,
+    Sub,
+    Mul,
+    Div,
     Lt,
     Gt,
     Assign,
@@ -27,7 +31,7 @@ pub enum Op {
 }
 
 /// A separator.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Sep {
     Comma,
     Colon,
@@ -72,6 +76,11 @@ impl Display for Token {
             Self::Sep(Sep::ParensClose) => write!(f, ")"),
             Self::Sep(Sep::BracketOpen) => write!(f, "["),
             Self::Sep(Sep::BracketClose) => write!(f, "]"),
+
+            Self::Op(Op::Add) => write!(f, "+"),
+            Self::Op(Op::Sub) => write!(f, "-"),
+            Self::Op(Op::Mul) => write!(f, "*"),
+            Self::Op(Op::Div) => write!(f, "/"),
 
             Self::Op(Op::Lt) => write!(f, "<"),
             Self::Op(Op::Gt) => write!(f, ">"),
@@ -136,13 +145,38 @@ impl<R: Read + Seek> Tokenizer<R> {
                 '"' => tokens.push(Token::String(self.read_string()?)),
 
                 // a number: number
-                '0'..='9' | '-' => tokens.push(Token::Number(self.read_number()?)),
+                '0'..='9' => tokens.push(Token::Number(self.read_number(false)?)),
 
                 // a number sign: comment
                 '#' => {
                     self.read_while(|c| c != '\n')?;
                 }
 
+                // arithmetic operators
+                '+' => {
+                    tokens.push(Token::Op(Op::Add));
+                    self.skip()?;
+                }
+                '-' => {
+                    // this could be two things:
+                    // a number (there must be a numerical character IMMEDIATELY after this one)
+                    // anything else
+                    self.skip()?;
+                    match self.peek_next()? {
+                        '0'..='9' => tokens.push(Token::Number(self.read_number(true)?)),
+                        _ => tokens.push(Token::Op(Op::Sub)),
+                    }
+                }
+                '*' => {
+                    tokens.push(Token::Op(Op::Mul));
+                    self.skip()?;
+                }
+                '/' => {
+                    tokens.push(Token::Op(Op::Div));
+                    self.skip()?;
+                }
+
+                // other operators/separators
                 '<' => {
                     tokens.push(Token::Op(Op::Lt));
                     self.skip()?;
@@ -234,12 +268,16 @@ impl<R: Read + Seek> Tokenizer<R> {
     }
 
     /// Read a number, which is an f64. Decimal optional.
-    fn read_number(&mut self) -> Result<f64, TokenizeError> {
-        let negative = if let Ok('-') = self.peek_next() {
-            self.next()?;
+    fn read_number(&mut self, def_negative: bool) -> Result<f64, TokenizeError> {
+        let negative = if def_negative {
             true
         } else {
-            false
+            if let Ok('-') = self.peek_next() {
+                self.next()?;
+                true
+            } else {
+                false
+            }
         };
         let mut pre_dec = String::new(); // chars before the .
         let mut post_dec = String::new(); // chars after the .

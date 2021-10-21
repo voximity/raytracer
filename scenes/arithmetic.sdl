@@ -1,0 +1,18 @@
+let radius = 3
+let n = 8
+
+sun {
+    vector: <-0.8, -1, -0.2>,
+    intensity: 0.8
+}
+
+for i in 0 to n {
+    sphere {
+        position: vec(
+            cos(i / n * TAU) * radius,
+            sin(i / n * TAU) * radius,
+            -12
+        ),
+        radius: 1
+    }
+}

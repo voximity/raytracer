@@ -104,6 +104,23 @@ impl Value {
                     .filter_map(|(k, v)| Value::from_node(interpreter, v).ok().map(|v| (k, v)))
                     .collect(),
             ),
+            // arithmetic operators
+            ast::Node::Add(a, b) => Self::from_node(
+                interpreter,
+                ast::Node::Call(String::from("add"), vec![*a, *b]),
+            )?,
+            ast::Node::Sub(a, b) => Self::from_node(
+                interpreter,
+                ast::Node::Call(String::from("sub"), vec![*a, *b]),
+            )?,
+            ast::Node::Mul(a, b) => Self::from_node(
+                interpreter,
+                ast::Node::Call(String::from("mul"), vec![*a, *b]),
+            )?,
+            ast::Node::Div(a, b) => Self::from_node(
+                interpreter,
+                ast::Node::Call(String::from("div"), vec![*a, *b]),
+            )?,
             _ => return Err(InterpretError::NonValueNode),
         };
 

@@ -1,9 +1,32 @@
 use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
+use lazy_static::lazy_static;
 use raytracer::{material::Color, math::Vector3};
 use thiserror::Error;
 
 use crate::tokenize::{Op, Sep, Token};
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Associativity {
+    Left,
+    Right,
+}
+
+lazy_static! {
+    static ref OP_PRECEDENCE: HashMap<Op, u8> =
+        vec![(Op::Mul, 2), (Op::Div, 2), (Op::Add, 1), (Op::Sub, 1),]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+    static ref OP_ASSOCIATIVITY: HashMap<Op, Associativity> = vec![
+        (Op::Add, Associativity::Left),
+        (Op::Sub, Associativity::Left),
+        (Op::Mul, Associativity::Left),
+        (Op::Div, Associativity::Left),
+    ]
+    .into_iter()
+    .collect::<HashMap<_, _>>();
+}
 
 /// An error while parsing to the AST.
 #[derive(Debug, Error)]
@@ -13,6 +36,12 @@ pub enum AstError {
 
     #[error("expected more tokens, got end")]
     UnexpectedEof,
+
+    #[error("error parsing arithmetic expression")]
+    ArithmeticError,
+    
+    #[error("too many closing parenthesis")]
+    ArithmeticExcessCloseParensError(Option<Node>),
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +97,18 @@ pub enum Node {
 
     /// A scope terminator.
     ScopeTerminator,
+
+    /// The addition of two nodes.
+    Add(Box<Node>, Box<Node>),
+
+    /// The subtraction of two nodes.
+    Sub(Box<Node>, Box<Node>),
+
+    /// The multiplication of two nodes.
+    Mul(Box<Node>, Box<Node>),
+
+    /// The division of two nodes.
+    Div(Box<Node>, Box<Node>),
 }
 
 /// A kind of node *value*, rather than just any node. Used to allow functions to specify
@@ -213,29 +254,287 @@ impl AstParser {
 
     /// Parse any "value": effectively an expression that has some value.
     fn parse_value(&mut self) -> Result<Node, AstError> {
-        match self.next()? {
-            Token::Identifier(ident) => {
-                if let Some(Token::Sep(Sep::ParensOpen)) = self.tokens.peek() {
-                    self.tokens.next();
+        let mut op_stack: Vec<Token> = vec![];
+        let mut out_queue: Vec<Node> = vec![];
 
-                    let params = self.read_list(
-                        Self::parse_value,
-                        |s| s.read_sep(Sep::Comma),
-                        Token::Sep(Sep::ParensClose),
-                    )?;
+        let mut last_op = true;
+        loop {
+            let peeking = self.tokens.peek().ok_or(AstError::UnexpectedEof)?;
+            match peeking {
+                Token::Number(_) => {
+                    if !last_op {
+                        break;
+                    } else {
+                        last_op = false;
+                    }
 
-                    Ok(Node::Call(ident, params))
-                } else {
-                    Ok(Node::Identifier(ident))
+                    let n = match self.next()? {
+                        Token::Number(n) => n,
+                        _ => unreachable!(),
+                    };
+
+                    out_queue.push(Node::Number(n));
+                }
+                Token::String(_) => {
+                    if !last_op {
+                        break;
+                    } else {
+                        last_op = false;
+                    }
+
+                    let s = match self.next()? {
+                        Token::String(s) => s,
+                        _ => unreachable!(),
+                    };
+
+                    out_queue.push(Node::String(s));
+                }
+                Token::Boolean(_) => {
+                    if !last_op {
+                        break;
+                    } else {
+                        last_op = false;
+                    }
+
+                    let b = match self.next()? {
+                        Token::Boolean(b) => b,
+                        _ => unreachable!(),
+                    };
+
+                    out_queue.push(Node::Boolean(b));
+                }
+                Token::Sep(Sep::BraceOpen) => {
+                    if !last_op {
+                        break;
+                    } else {
+                        last_op = false;
+                    }
+
+                    self.next()?;
+
+                    out_queue.push(self.read_dict()?);
+                }
+                Token::Op(Op::Lt) => {
+                    if !last_op {
+                        break;
+                    } else {
+                        last_op = false;
+                    }
+
+                    self.next()?;
+                    out_queue.push(self.read_vector()?);
+                }
+                Token::Identifier(_) => {
+                    if !last_op {
+                        break;
+                    } else {
+                        last_op = false;
+                    }
+
+                    let ident = match self.next()? {
+                        Token::Identifier(ident) => ident,
+                        _ => unreachable!(),
+                    };
+
+                    if let Some(Token::Sep(Sep::ParensOpen)) = self.tokens.peek() {
+                        self.next()?;
+
+                        let mut v = Vec::new();
+
+                        loop {
+                            // if we hit the close token, stop the loop early
+                            if let Some(t) = self.tokens.peek() {
+                                if t == &Token::Sep(Sep::ParensClose) {
+                                    self.next()?;
+                                    break;
+                                }
+                            }
+
+                            // continuously scan for more items
+                            let (next_item, ct) = match self.parse_value() {
+                                Ok(v) => (v, true),
+                                Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => (v, false),
+                                Err(e) => return Err(e),
+                            };
+                            v.push(next_item);
+
+                            if !ct {
+                                break;
+                            }
+
+                            // if we hit the close token, stop the loop, just like before
+                            if let Some(t) = self.tokens.peek() {
+                                if t == &Token::Sep(Sep::ParensClose) {
+                                    self.next()?;
+                                    break;
+                                }
+                            }
+
+                            // if the next token wasn't the close token, expect the delimiter
+                            self.read_sep(Sep::Comma)?;
+                        }
+
+                        out_queue.push(Node::Call(ident, v));
+                    } else {
+                        out_queue.push(Node::Identifier(ident));
+                    }
+                }
+                Token::Op(_) => {
+                    last_op = true;
+
+                    let op = match self.next()? {
+                        Token::Op(op) => op,
+                        _ => unreachable!(),
+                    };
+
+                    // this token is an operator, match it further
+                    match op {
+                        Op::Add | Op::Sub | Op::Mul | Op::Div => {
+                            loop {
+                                let condition = match op_stack.last() {
+                                    None => false,
+                                    Some(Token::Sep(Sep::ParensOpen)) => false,
+                                    Some(Token::Op(top)) => {
+                                        let top_precedence = &OP_PRECEDENCE[top];
+                                        let op_precedence = &OP_PRECEDENCE[&op];
+                                        top_precedence > op_precedence
+                                            || (top_precedence == op_precedence
+                                                && OP_ASSOCIATIVITY[&op] == Associativity::Left)
+                                    }
+                                    _ => unimplemented!(),
+                                };
+
+                                if !condition {
+                                    break;
+                                }
+
+                                let top_op_stack = op_stack.pop().unwrap();
+                                match top_op_stack {
+                                    Token::Op(Op::Add) => {
+                                        let b = out_queue.pop().unwrap();
+                                        let a = out_queue.pop().unwrap();
+                                        out_queue.push(Node::Add(Box::new(a), Box::new(b)));
+                                    }
+                                    Token::Op(Op::Sub) => {
+                                        let b = out_queue.pop().unwrap();
+                                        let a = out_queue.pop().unwrap();
+                                        out_queue.push(Node::Sub(Box::new(a), Box::new(b)));
+                                    }
+                                    Token::Op(Op::Mul) => {
+                                        let b = out_queue.pop().unwrap();
+                                        let a = out_queue.pop().unwrap();
+                                        out_queue.push(Node::Mul(Box::new(a), Box::new(b)));
+                                    }
+                                    Token::Op(Op::Div) => {
+                                        let b = out_queue.pop().unwrap();
+                                        let a = out_queue.pop().unwrap();
+                                        out_queue.push(Node::Div(Box::new(a), Box::new(b)));
+                                    }
+                                    _ => unimplemented!(),
+                                }
+                            }
+
+                            op_stack.push(Token::Op(op));
+                        }
+                        _ => unimplemented!(),
+                    }
+                }
+                Token::Sep(Sep::ParensOpen) => {
+                    last_op = true;
+                    self.next()?;
+                    op_stack.push(Token::Sep(Sep::ParensOpen));
+                }
+                Token::Sep(Sep::ParensClose) => {
+                    last_op = true;
+                    self.next()?;
+
+                    loop {
+                        let condition = match op_stack.last() {
+                            Some(Token::Sep(Sep::ParensOpen)) => false,
+                            _ => true,
+                        };
+
+                        if !condition {
+                            break;
+                        }
+
+                        // assert the operator stack is not empty
+                        if op_stack.is_empty() {
+                            return Err(AstError::ArithmeticExcessCloseParensError(out_queue.into_iter().next()));
+                        }
+
+                        // pop the operator from the operator stack into the output queue
+                        let top_op_stack = op_stack.pop().unwrap();
+                        match top_op_stack {
+                            Token::Op(Op::Add) => {
+                                let b = out_queue.pop().unwrap();
+                                let a = out_queue.pop().unwrap();
+                                out_queue.push(Node::Add(Box::new(a), Box::new(b)));
+                            }
+                            Token::Op(Op::Sub) => {
+                                let b = out_queue.pop().unwrap();
+                                let a = out_queue.pop().unwrap();
+                                out_queue.push(Node::Sub(Box::new(a), Box::new(b)));
+                            }
+                            Token::Op(Op::Mul) => {
+                                let b = out_queue.pop().unwrap();
+                                let a = out_queue.pop().unwrap();
+                                out_queue.push(Node::Mul(Box::new(a), Box::new(b)));
+                            }
+                            Token::Op(Op::Div) => {
+                                let b = out_queue.pop().unwrap();
+                                let a = out_queue.pop().unwrap();
+                                out_queue.push(Node::Div(Box::new(a), Box::new(b)));
+                            }
+                            _ => (),
+                        }
+                    }
+
+                    // assert there is a left parenthesis at the top of the operator stack
+                    if let Some(Token::Sep(Sep::ParensOpen)) = op_stack.last() {
+                        op_stack.pop();
+                    } else {
+                        return Err(AstError::ArithmeticError);
+                    }
+                }
+                _ => {
+                    break;
                 }
             }
-            Token::Boolean(bool) => Ok(Node::Boolean(bool)),
-            Token::String(str) => Ok(Node::String(str)),
-            Token::Number(num) => Ok(Node::Number(num)),
-            Token::Op(Op::Lt) => Ok(self.read_vector()?),
-            Token::Sep(Sep::BraceOpen) => Ok(self.read_dict()?),
-            t => Err(AstError::UnexpectedToken("a value".into(), t)),
         }
+
+        while !op_stack.is_empty() {
+            if let Some(Token::Sep(Sep::ParensOpen)) = op_stack.last() {
+                return Err(AstError::ArithmeticError);
+            } else {
+                let top_op_stack = op_stack.pop().unwrap();
+                match top_op_stack {
+                    Token::Op(Op::Add) => {
+                        let b = out_queue.pop().unwrap();
+                        let a = out_queue.pop().unwrap();
+                        out_queue.push(Node::Add(Box::new(a), Box::new(b)));
+                    }
+                    Token::Op(Op::Sub) => {
+                        let b = out_queue.pop().unwrap();
+                        let a = out_queue.pop().unwrap();
+                        out_queue.push(Node::Sub(Box::new(a), Box::new(b)));
+                    }
+                    Token::Op(Op::Mul) => {
+                        let b = out_queue.pop().unwrap();
+                        let a = out_queue.pop().unwrap();
+                        out_queue.push(Node::Mul(Box::new(a), Box::new(b)));
+                    }
+                    Token::Op(Op::Div) => {
+                        let b = out_queue.pop().unwrap();
+                        let a = out_queue.pop().unwrap();
+                        out_queue.push(Node::Div(Box::new(a), Box::new(b)));
+                    }
+                    _ => (),
+                }
+            }
+        }
+
+        Ok(out_queue.into_iter().next().unwrap())
     }
 
     /// Read a scene object.
@@ -303,13 +602,7 @@ impl AstParser {
                     Ok((key.clone(), Node::Identifier(key)))
                 }
             },
-            |s| {
-                if let Some(Token::Sep(Sep::Comma)) = s.tokens.peek() {
-                    s.next()?;
-                }
-
-                Ok(())
-            },
+            |s| s.read_expecting(Token::Sep(Sep::Comma)),
             Token::Sep(Sep::BraceClose),
         )?;
 
