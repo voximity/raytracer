@@ -283,3 +283,71 @@ for i in 0 to segments {
 ```
 
 ![Progress screenshot from 10/19/2021](/images/readme/10_19_2021.png)
+
+#### 10/20/2021
+
+I have done a lot with the SDL today! I refined variables, added a [Shunting-yard](https://en.wikipedia.org/wiki/Shunting-yard_algorithm)
+expression parser, streamlined the vector constructor, and added time parameterization to create GIFs.
+The SDL can now generate a sequence of PNGs, and then you can use a tool like FFmpeg to convert these
+to a coherent GIF. Here is a coherent GIF below generated from the adjacent code:
+
+![Progress animation from 10/20/2021](/images/readme/10_20_2021.png)
+
+```
+# Some variables for quick customization. We insert them into our camera...
+let vw = 500
+let vh = 500
+let fov = 40
+camera { vw, vh, fov, yaw: 0.0001, pitch: 0.0002 }
+
+# Add a basic skybox.
+skybox {
+    type: "cubemap",
+    image: "assets/space.png"
+}
+
+# Here are some variables defined in the top-level scope.
+let dist = 3
+let radius = 0.5
+let n = 24
+let time_scale = PI / 32
+
+# Add a basic sun light...
+sun {
+    vector: <-0.8, -1, -0.2>,
+    intensity: 0.8
+}
+
+# A for loop, over the range [0..n)
+for i in 0 to n {
+    # Add a sphere in each iteration...
+    sphere {
+        # With a position following a circle, with radius `dist`.
+        position: <
+            cos(i / n * TAU) * dist * cos(t * time_scale),
+            sin(i / n * TAU) * dist,
+            cos(i / n * TAU) * dist * sin(t * time_scale) - 12
+        >,
+
+        # Set the radius to our variable `radius`. Leaving out a value (e.g. `radius: 1`)
+        # tries to pull a value out of a variable of the same name, in this case, one we set in the
+        # top-level scope.
+        radius,
+
+        material: {
+            # Use the HSV color constructor to pick colors off of a rainbow.
+            texture: solid(hsv(i / n * 360, 1, 1)),
+            reflectiveness: 0.2
+        }
+    }
+}
+
+# Finally one shiny sphere in the middle, because why not!
+sphere {
+    position: <0, 0, -13>,
+    radius: 2,
+    material: {
+        reflectiveness: 0.8
+    }
+}
+```

@@ -382,12 +382,11 @@ impl AstParser {
                     }
                 }
                 Token::Op(op) => {
-
                     // this token is an operator, match it further
                     match op {
                         Op::Add | Op::Sub | Op::Mul | Op::Div => {
                             last_op = true;
-        
+
                             let op = match self.next()? {
                                 Token::Op(op) => op,
                                 _ => unreachable!(),
