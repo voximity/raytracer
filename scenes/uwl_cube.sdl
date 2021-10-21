@@ -20,7 +20,7 @@ sun {
 
 # This is the main UWL cube in the front.
 aabb {
-    position: vec(random(-1, 1), random(0, 1), random(-9, -7)),
+    position: <random(-1, 1), random(0, 1), random(-9, -7)>,
     size: <1, 1, 1>,
     material: {
         texture: image("assets/uwl.png"),

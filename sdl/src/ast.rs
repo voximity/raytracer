@@ -1,7 +1,7 @@
 use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use lazy_static::lazy_static;
-use raytracer::{material::Color, math::Vector3};
+use raytracer::material::Color;
 use thiserror::Error;
 
 use crate::tokenize::{Op, Sep, Token};
@@ -39,7 +39,7 @@ pub enum AstError {
 
     #[error("error parsing arithmetic expression")]
     ArithmeticError,
-    
+
     #[error("too many closing parenthesis")]
     ArithmeticExcessCloseParensError(Option<Node>),
 }
@@ -87,7 +87,7 @@ pub enum Node {
     Number(f64),
 
     /// A vector.
-    Vector(Vector3),
+    Vector(Box<Node>, Box<Node>, Box<Node>),
 
     /// A color. This is really just a Call("color", vec![R, G, B]).
     Color(Color),
@@ -353,7 +353,9 @@ impl AstParser {
                             // continuously scan for more items
                             let (next_item, ct) = match self.parse_value() {
                                 Ok(v) => (v, true),
-                                Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => (v, false),
+                                Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => {
+                                    (v, false)
+                                }
                                 Err(e) => return Err(e),
                             };
                             v.push(next_item);
@@ -379,17 +381,18 @@ impl AstParser {
                         out_queue.push(Node::Identifier(ident));
                     }
                 }
-                Token::Op(_) => {
-                    last_op = true;
-
-                    let op = match self.next()? {
-                        Token::Op(op) => op,
-                        _ => unreachable!(),
-                    };
+                Token::Op(op) => {
 
                     // this token is an operator, match it further
                     match op {
                         Op::Add | Op::Sub | Op::Mul | Op::Div => {
+                            last_op = true;
+        
+                            let op = match self.next()? {
+                                Token::Op(op) => op,
+                                _ => unreachable!(),
+                            };
+
                             loop {
                                 let condition = match op_stack.last() {
                                     None => false,
@@ -436,7 +439,7 @@ impl AstParser {
 
                             op_stack.push(Token::Op(op));
                         }
-                        _ => unimplemented!(),
+                        _ => break,
                     }
                 }
                 Token::Sep(Sep::ParensOpen) => {
@@ -460,7 +463,9 @@ impl AstParser {
 
                         // assert the operator stack is not empty
                         if op_stack.is_empty() {
-                            return Err(AstError::ArithmeticExcessCloseParensError(out_queue.into_iter().next()));
+                            return Err(AstError::ArithmeticExcessCloseParensError(
+                                out_queue.into_iter().next(),
+                            ));
                         }
 
                         // pop the operator from the operator stack into the output queue
@@ -616,21 +621,14 @@ impl AstParser {
     /// <1.1, 2.4, 6.7>
     /// ```
     fn read_vector(&mut self) -> Result<Node, AstError> {
-        fn read_num(me: &mut AstParser) -> Result<f64, AstError> {
-            match me.next()? {
-                Token::Number(num) => Ok(num),
-                t => return Err(AstError::UnexpectedToken("a number".into(), t)),
-            }
-        }
-
-        let x = read_num(self)?;
+        let x = self.parse_value()?;
         self.read_sep(Sep::Comma)?;
-        let y = read_num(self)?;
+        let y = self.parse_value()?;
         self.read_sep(Sep::Comma)?;
-        let z = read_num(self)?;
+        let z = self.parse_value()?;
         self.read_expecting(Token::Op(Op::Gt))?;
 
-        Ok(Node::Vector(Vector3::new(x, y, z)))
+        Ok(Node::Vector(Box::new(x), Box::new(y), Box::new(z)))
     }
 
     /// Read from the token stream, expecting a token.

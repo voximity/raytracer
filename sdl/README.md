@@ -42,7 +42,7 @@ As far as values go, there are a few primitive types:
 * Numbers, which are constructed with literal numbers like `1`, `2.4`, `-5.0`, ...
 * Strings, which are constructed with literal strings like `"hello world!"`, `"I say \"hello\""`, ...
 * Booleans, which are constructed with the keywords `true`/`yes` or `false`/`no`
-* Vectors, which are constructed with the syntax `<x, y, z>`, where x, y, and z are numbers, like `<0, 0, 0>`, `<-1.2, 3.4, 5.06>`
+* Vectors, which are constructed with the syntax `<x, y, z>`
 * Colors, which are constructed with the familiar function call syntax `color(r, g, b)`, where r, g, and b are numbers from 0-255
 * Dictionaries, which are constructed much like JSON objects. They are wrapped in curly braces and are a collection of comma-separated key-values, like `{key: value, another_key: another_value}`
 
@@ -78,7 +78,7 @@ There are a number of functions that can be used as values.
 
 #### Constructors
 
-* `vec(x, y, z)` constructs a vector from 3 numbers (this is useful as syntax like `<PI, PI, PI>` is not supported. instead, prefer `vec(PI, PI, PI)`)
+* `vec(x, y, z)` constructs a vector from 3 numbers (alternatively use `<x, y, z>`)
 * `color(r, g, b)` or `rgb(r, g, b)` constructs a color from 3 numbers (each 0-255)
 * `hsv(h, s, v)` constructs a color from HSV values where H is in [0, 360], and S and V are both from 0 to 1.
 
@@ -113,6 +113,8 @@ the form:
 There are a collection of valid object names, like
 
 * `camera`, used to define the camera transform and viewport\*
+* `scene`, used to define a few scene properties\*
+* `skybox`, used to define the scene's skybox\*
 * `aabb` or `box`, an object that is an axis-aligned bounding box
 * `mesh`, an object that can be loaded from an `obj` file and is a mesh
 * `plane`, an object that is a plane
@@ -163,6 +165,9 @@ for, say, `camera`. Read on to see what properties are valid for what objects.
   * `yaw` (number), the yaw of camera rotation in radians
   * `pitch` (number), the pitch of camera rotation in radians
   * `fov` (number), the field of view of the camera in degrees
+* `scene` (defined once)
+  * `max_ray_depth` (number), the maximum number of rays
+  * `ambient` (color), the ambient color of objects receiving no light in the scene
 * `skybox` (defined once)
   * `type` (string), dictates what type of skybox to use
     * `"normal"`: use the ray direction to determine color

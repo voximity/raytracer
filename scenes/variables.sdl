@@ -1,12 +1,10 @@
-view_width = 800
-view_height = 600
+vw = 800
+vh = 600
 skybox = "assets/storforsen_4.jpg"
-zero_vec = <0, 0, 0>
 
 camera {
-    vw: view_width,
-    vh: view_height,
-    origin: add(zero_vec, <1.5, 0.3, 3>),
+    vw, vh,
+    origin: <1.5, 0.3, 0.3>,
     yaw: -0.5,
     pitch: -0.3,
 }

@@ -8,11 +8,11 @@ sun {
 
 for i in 0 to n {
     sphere {
-        position: vec(
+        position: <
             cos(i / n * TAU) * radius,
             sin(i / n * TAU) * radius,
             -12
-        ),
+        >,
         radius: 1
     }
 }

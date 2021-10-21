@@ -10,12 +10,12 @@ sun {
 }
 
 for i in 0 to segments {
-    let frac = div(i, segments)
-    let inner = mul(frac, TAU)
-    let color_channel = mul(frac, 255)
+    let frac = i / segments
+    let inner = frac * TAU
+    let color_channel = frac * 255
 
     sphere {
-        position: vec(cos(inner), sin(inner), -4),
+        position: <cos(inner), sin(inner), -4>,
         radius: 0.3,
         material: {
             texture: solid(color(color_channel, color_channel, color_channel)),

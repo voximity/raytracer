@@ -24,7 +24,7 @@ mesh {
     position: <0, -0.5, 0>,
     obj: "assets/fedora.obj",
     scale: 0.7,
-    rotate_xyz: vec(0, rad(t * 15), 0),
+    rotate_xyz: <0, rad(t * 15), 0>,
     material: {
         texture: image("assets/fedora.png")
     }
@@ -33,7 +33,7 @@ mesh {
 for i in 0 to n {
     let frac = i / n
     let inner = frac * TAU
-    let position = vec(cos(inner) * dist, 0, sin(inner) * dist)
+    let position = <cos(inner) * dist, 0, sin(inner) * dist>
     let color = hsv(deg(inner), 1, 1)
 
     sphere {
@@ -46,7 +46,7 @@ for i in 0 to n {
     }
 
     point_light {
-        position: mul(position, vec(0.5, 0.5, 0.5)),
+        position: position * <0.5, 0.5, 0.5>,
         color,
         intensity: 0.5
     }

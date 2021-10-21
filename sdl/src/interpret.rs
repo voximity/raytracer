@@ -20,6 +20,32 @@ use crate::{
     tokenize::{TokenizeError, Tokenizer},
 };
 
+macro_rules! optional_property {
+    ($self:ident, $properties:ident, $name:literal, $k:ident) => {
+        $self
+            .optional_property(&mut $properties, $name, ast::NodeKind::$k)?
+            .map(|v| unwrap_variant!(v, Value::$k))
+    };
+}
+
+macro_rules! required_property {
+    ($self:ident, $properties:ident, $name:literal, $k:ident) => {
+        match optional_property!($self, $properties, $name, $k) {
+            Some(a) => a,
+            _ => return Err(InterpretError::RequiredPropertyMissing($name)),
+        }
+    };
+}
+
+macro_rules! unwrap_variant {
+    ($matching:expr, $variant:path) => {
+        match $matching {
+            $variant(a) => a,
+            _ => panic!("unwrapped variant {}", stringify!($variant)),
+        }
+    };
+}
+
 /// An interpreter error.
 #[derive(Debug, Error)]
 pub enum InterpretError {
@@ -77,7 +103,11 @@ impl From<Value> for ast::Node {
         match v {
             Value::String(s) => Self::String(s),
             Value::Number(n) => Self::Number(n),
-            Value::Vector(v) => Self::Vector(v),
+            Value::Vector(v) => Self::Vector(
+                Box::new(Self::Number(v.x)),
+                Box::new(Self::Number(v.y)),
+                Box::new(Self::Number(v.z)),
+            ),
             Value::Color(c) => Self::Color(c),
             Value::Boolean(b) => Self::Boolean(b),
             Value::Dictionary(m) => {
@@ -96,7 +126,16 @@ impl Value {
             ast::Node::Call(name, args) => interpreter.call_func(name, args)?,
             ast::Node::String(s) => Self::String(s),
             ast::Node::Number(n) => Self::Number(n),
-            ast::Node::Vector(v) => Self::Vector(v),
+            ast::Node::Vector(x, y, z) => {
+                let x = Self::from_node(interpreter, *x)?;
+                let y = Self::from_node(interpreter, *y)?;
+                let z = Self::from_node(interpreter, *z)?;
+                Self::Vector(Vector3::new(
+                    unwrap_variant!(x, Self::Number),
+                    unwrap_variant!(y, Self::Number),
+                    unwrap_variant!(z, Self::Number),
+                ))
+            }
             ast::Node::Color(c) => Self::Color(c),
             ast::Node::Boolean(b) => Self::Boolean(b),
             ast::Node::Dictionary(m) => Self::Dictionary(
@@ -137,32 +176,6 @@ impl Value {
         }
         Ok(values)
     }
-}
-
-macro_rules! optional_property {
-    ($self:ident, $properties:ident, $name:literal, $k:ident) => {
-        $self
-            .optional_property(&mut $properties, $name, ast::NodeKind::$k)?
-            .map(|v| unwrap_variant!(v, Value::$k))
-    };
-}
-
-macro_rules! required_property {
-    ($self:ident, $properties:ident, $name:literal, $k:ident) => {
-        match optional_property!($self, $properties, $name, $k) {
-            Some(a) => a,
-            _ => return Err(InterpretError::RequiredPropertyMissing($name)),
-        }
-    };
-}
-
-macro_rules! unwrap_variant {
-    ($matching:expr, $variant:path) => {
-        match $matching {
-            $variant(a) => a,
-            _ => panic!("unwrapped variant {}", stringify!($variant)),
-        }
-    };
 }
 
 /// A scope is a wrapper around a dictionary from identifier
