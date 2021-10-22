@@ -7,7 +7,7 @@ use image::{ImageBuffer, Rgb};
 use lazy_static::lazy_static;
 use rand::Rng;
 use raytracer::{
-    lighting,
+    lighting::{self, AreaSurface},
     material::{Color, Material, Texture},
     math::{Lerp, Vector3},
     object,
@@ -567,6 +567,53 @@ impl Interpreter {
 
                             scene.lights.push(Box::new(light));
                         }
+                        "area_light" | "arealight" => {
+                            let default = lighting::Area::default();
+
+                            let color = optional_property!(self, properties, "color", Color);
+                            let intensity =
+                                optional_property!(self, properties, "intensity", Number);
+                            let specular_power =
+                                optional_property!(self, properties, "specular_power", Number)
+                                    .map(|f| f as i32);
+                            let specular_strength =
+                                optional_property!(self, properties, "specular_strength", Number);
+                            let surface =
+                                match required_property!(self, properties, "surface", String)
+                                    .as_str()
+                                {
+                                    "sphere" => AreaSurface::Sphere(
+                                        required_property!(self, properties, "position", Vector),
+                                        required_property!(self, properties, "radius", Number),
+                                    ),
+                                    "rectangle" => AreaSurface::Rectangle([
+                                        required_property!(self, properties, "c00", Vector),
+                                        required_property!(self, properties, "c01", Vector),
+                                        required_property!(self, properties, "c10", Vector),
+                                        required_property!(self, properties, "c11", Vector),
+                                    ]),
+                                    _ => return Err(InterpretError::InvalidMaterials),
+                                };
+                            let iterations =
+                                optional_property!(self, properties, "iterations", Number);
+                            let max_distance =
+                                optional_property!(self, properties, "max_distance", Number);
+
+                            let light = lighting::Area {
+                                color: color.unwrap_or(default.color),
+                                intensity: intensity.unwrap_or(default.intensity),
+                                specular_power: specular_power.unwrap_or(default.specular_power),
+                                specular_strength: specular_strength
+                                    .unwrap_or(default.specular_strength),
+                                surface,
+                                iterations: iterations
+                                    .map(|f| f as u32)
+                                    .unwrap_or(default.iterations),
+                                max_distance: max_distance.unwrap_or(default.max_distance),
+                            };
+
+                            scene.lights.push(Box::new(light));
+                        }
                         _ => return Err(InterpretError::UnknownObject(name.clone())),
                     }
 
@@ -590,7 +637,8 @@ impl Interpreter {
                     optional_property!(self, map, "reflectiveness", Number).unwrap_or(0.);
                 let transparency =
                     optional_property!(self, map, "transparency", Number).unwrap_or(0.);
-                let ior = optional_property!(self, map, "ior", Number).unwrap_or(1.3);
+                let ior = optional_property!(self, map, "ior", Number).unwrap_or(1.5);
+                let emissivity = optional_property!(self, map, "emissivity", Number).unwrap_or(0.);
 
                 let texture = match map.remove("texture") {
                     Some(node) => self.read_texture(node)?,
@@ -602,6 +650,7 @@ impl Interpreter {
                     reflectiveness,
                     transparency,
                     ior,
+                    emissivity,
                 })
             }
             Some(_) => Err(InterpretError::InvalidMaterials),
@@ -687,6 +736,7 @@ impl Interpreter {
                 Function::new(&["sub"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) - unwrap_variant!(v[1], Value::Number)))),
                 Function::new(&["mul"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) * unwrap_variant!(v[1], Value::Number)))),
                 Function::new(&["div"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) / unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["mod"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) % unwrap_variant!(v[1], Value::Number)))),
 
                 // vector operators
                 Function::new(&["add"], &[NodeKind::Vector, NodeKind::Vector], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) + unwrap_variant!(v[1], Value::Vector)))),
@@ -786,7 +836,10 @@ impl Interpreter {
 
         let values = Value::from_nodes(self, args)?;
 
-        for func in FUNCTIONS.iter().filter(|f| f.names.contains(&name.as_str())) {
+        for func in FUNCTIONS
+            .iter()
+            .filter(|f| f.names.contains(&name.as_str()))
+        {
             if let Some(r) = func.try_eval(values.clone()) {
                 return r;
             }

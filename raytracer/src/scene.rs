@@ -100,6 +100,11 @@ impl Scene {
         };
 
         let mut color: Vector3 = object.material().texture.at(hit.uv).into();
+        let base_color = color.clone();
+
+        if object.material().emissivity == 1. {
+            return color.into();
+        }
 
         // Calculate light influences
         let mut sum_vecs: Vector3 = self.options.ambient.into();
@@ -140,19 +145,18 @@ impl Scene {
                     if let Some(exit_hit) =
                         object.intersect(&Ray::new(ref_hit.vfar + ref_vec, -ref_vec))
                     {
-                        let exit_ref_vec = refraction_vec(
-                            &Ray::new(ref_hit.vfar, ref_vec),
+                        if let Some(exit_ref_vec) = refraction_vec(
+                            &Ray::new(ref_hit.vfar + ref_vec * EPSILON, ref_vec),
                             -exit_hit.normal,
                             ior,
                             1.,
-                        )
-                        .unwrap();
-
-                        let ref_col = self.trace_ray(
-                            Ray::new(ref_hit.vfar + exit_ref_vec * EPSILON, exit_ref_vec),
-                            depth + 1,
-                        );
-                        transparency_color = ref_col.into();
+                        ) {
+                            let ref_col = self.trace_ray(
+                                Ray::new(ref_hit.vfar + exit_ref_vec * EPSILON, exit_ref_vec),
+                                depth + 1,
+                            );
+                            transparency_color = ref_col.into();
+                        }
                     }
                 }
             }
@@ -160,7 +164,7 @@ impl Scene {
             // if we're at all reflective, apply fresnel reflections
             if reflectiveness > EPSILON {
                 // we raise this to a power of two so that edge reflections are much more strong than center reflections
-                let dot = (1. + ray.direction.dot(hit.normal)).powi(1);
+                let dot = (-ray.direction).dot(hit.normal).powi(2);
 
                 let reflected = self.trace_ray(
                     ray.reflect(hit.vnear + hit.normal * EPSILON, hit.normal),
@@ -169,7 +173,7 @@ impl Scene {
 
                 // mix in the reflected color highest at the edges
                 // TODO: incorporate `reflectiveness` here
-                transparency_color = transparency_color.lerp(reflected.into(), dot);
+                transparency_color = transparency_color.lerp(reflected.into(), 1. - dot);
             }
 
             color = color.lerp(transparency_color, transparency);
@@ -193,7 +197,12 @@ impl Scene {
 
         // todo: fog
 
-        color.into()
+        let emissivity = object.material().emissivity;
+        if emissivity > 0. {
+            color.lerp(base_color, emissivity).into()
+        } else {
+            color.into()
+        }
     }
 
     /// Trace out a pixel, where top-left of the image is (0, 0).

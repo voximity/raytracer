@@ -166,7 +166,7 @@ for, say, `camera`. Read on to see what properties are valid for what objects.
   * `pitch` (number), the pitch of camera rotation in radians
   * `fov` (number), the field of view of the camera in degrees
 * `scene` (defined once)
-  * `max_ray_depth` (number), the maximum number of rays
+  * `max_ray_depth` (number), the maximum number of rays that can bounce or refract from one source ray
   * `ambient` (color), the ambient color of objects receiving no light in the scene
 * `skybox` (defined once)
   * `type` (string), dictates what type of skybox to use

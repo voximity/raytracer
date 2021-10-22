@@ -157,6 +157,10 @@ pub struct Material {
     /// The index of refraction of this material. Higher numbers are more affected by refraction.
     /// At IOR=1, light passes through perfectly.
     pub ior: f64,
+
+    /// The emissivity of the material. At 0, it is not emissive at all. At 1, it is not affected by lighting
+    /// at all.
+    pub emissivity: f64,
 }
 
 impl Default for Material {
@@ -166,6 +170,7 @@ impl Default for Material {
             reflectiveness: 0.,
             transparency: 0.,
             ior: 1.3,
+            emissivity: 0.,
         }
     }
 }

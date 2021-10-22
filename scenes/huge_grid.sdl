@@ -1,0 +1,41 @@
+# scene config
+let n = 12
+let spacing = 2
+let radius = 0.5
+let jitter = 0.45
+
+sun {
+    vector: <-0.8, -1, -0.2>,
+    shadows: true
+}
+
+skybox {
+    type: "cubemap",
+    image: "assets/space.png"
+}
+
+camera {
+    vw: 1920,
+    vh: 1080,
+    origin: <4.6, 0.8, 9>,
+    yaw: -0.4,
+    pitch: -0.2
+}
+
+let hn = n * 0.5
+
+for z in 0 to n {
+    for y in 0 to n {
+        for x in 0 to n {
+            sphere {
+                position: <(x - hn) * spacing + random(0-jitter, jitter), (y - hn) * spacing + random(0-jitter, jitter), (z - hn) * spacing + random(0-jitter, jitter)>,
+                radius,
+                material: {
+                    texture: solid(rgb(x / n * 255, y / n * 255, z / n * 255)),
+                    transparency: 0.4,
+                    reflectiveness: 0.5,
+                }
+            }
+        }
+    }
+}

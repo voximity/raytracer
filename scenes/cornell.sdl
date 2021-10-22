@@ -1,0 +1,88 @@
+let vw = 512
+let vh = 512
+
+camera {
+    vw, vh,
+    origin: <0, 0, 3>,
+    fov: 45
+}
+
+#####################
+# CORNELL BOX SETUP #
+#####################
+
+# ceiling light
+aabb {
+    position: <0, 1, 0>,
+    size: <0.2, 0.0001, 0.2>,
+    material: {
+        emissivity: 1
+    }
+}
+
+area_light {
+    surface: "rectangle",
+    c00: <-0.6, 0.95, -0.25>,
+    c01: <-0.6, 0.95, 0.25>,
+    c10: <0.6, 0.95, -0.25>,
+    c11: <0.6, 0.95, 0.25>,
+    iterations: 64,
+    intensity: 0.12,
+}
+
+# floor
+plane {
+    origin: <0, -1, 0>,
+    normal: <0, 1, 0>
+}
+
+# ceiling
+plane {
+    origin: <0, 1, 0>,
+    normal: <0, -1, 0>
+}
+
+# back wall
+plane {
+    origin: <0, 0, -1>,
+    normal: <0, 0, 1>
+}
+
+# left wall
+plane {
+    origin: <-1, 0, 0>,
+    normal: <1, 0, 0>,
+    material: {
+        texture: solid(rgb(255, 0, 0))
+    }
+}
+
+# right wall
+plane {
+    origin: <1, 0, 0>,
+    normal: <-1, 0, 0>,
+    material: {
+        texture: solid(rgb(0, 255, 0))
+    }
+}
+
+##################
+# SCENE CONTENTS #
+##################
+
+sphere {
+    position: <-0.1, -0.6, 0.4>,
+    radius: 0.4,
+    material: {
+        transparency: 0.6,
+        reflectiveness: 0.5
+    }
+}
+
+sphere {
+    position: <0.3, -0.5, -0.4>,
+    radius: 0.5,
+    material: {
+        texture: solid(rgb(0, 0, 255))
+    }
+}
