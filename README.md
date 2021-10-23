@@ -15,17 +15,12 @@ As of now, there are several crates in this project:
 * `raytracer` - The raytracer itself, which takes a scene, raytraces it, and outputs it to a file.
 * `stitcher` - A cubemap stitcher. Provided 6 cubemap faces, this outputs a single atlas that can be used by the raytracer.
 * `sdl` - The raytracer's proprietary scene description language, loosely inspired by POV-Ray's. This crate has its own tokenizer, AST, and interpreter for parsing SDL files.
-* `sdl_lua` - An SDL runtime that uses Lua to describe a scene. This crate is only included for completeness; it is not in a functional state.
 
 For more information on the SDL (scene description language), please visit [its README](/sdl/README.md).
 
 ## Using
 
-To start, pick an SDL runtime. The proprietary language interpreter is `sdl`, so you will likely
-want to use that one.
-
-Start by building with `cargo build --release -p <runtime>`, where `<runtime>` is the name of the
-runtime crate you'd like to use. Generally, use `sdl`.
+Start by building with `cargo build --release -p sdl`.
 
 You can render a scene with `./target/release/sdl <source file> [-o <output file>]`. For example,
 you can render `fedora.sdl` to `fedora.png` with `./target/release/sdl fedora.sdl -o fedora.png`.
