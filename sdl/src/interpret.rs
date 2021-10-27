@@ -266,7 +266,6 @@ impl Interpreter {
         }];
 
         let tokens = Tokenizer::new(reader).tokenize()?;
-        println!("{:?}", tokens);
 
         Ok(Interpreter {
             root: AstParser::new(tokens).parse_root()?,

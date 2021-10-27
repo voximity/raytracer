@@ -1,4 +1,8 @@
-let ball_origin = <0, 0, -10>
+fn four() {
+    return 2 + 2
+}
+
+let ball_origin = <0, 0, 0 - four() * 2.5>
 
 fn ball(position) {
     sphere { position, radius: 1 }
