@@ -23,16 +23,16 @@ use crate::{
 };
 
 macro_rules! optional_property {
-    ($self:ident, $properties:ident, $name:literal, $k:ident) => {
+    ($self:ident, $scene:ident, $properties:ident, $name:literal, $k:ident) => {
         $self
-            .optional_property(&mut $properties, $name, ast::NodeKind::$k)?
+            .optional_property($scene, &mut $properties, $name, ast::NodeKind::$k)?
             .map(|v| unwrap_variant!(v, Value::$k))
     };
 }
 
 macro_rules! required_property {
-    ($self:ident, $properties:ident, $name:literal, $k:ident) => {
-        match optional_property!($self, $properties, $name, $k) {
+    ($self:ident, $scene:ident, $properties:ident, $name:literal, $k:ident) => {
+        match optional_property!($self, $scene, $properties, $name, $k) {
             Some(a) => a,
             _ => return Err(InterpretError::RequiredPropertyMissing($name)),
         }
@@ -92,17 +92,32 @@ pub enum InterpretError {
 /// an AST node that was a literal, a call, or a variable.
 #[derive(Debug, Clone)]
 pub enum Value {
+    /// The unit type. Represents no data.
+    Unit,
+
+    /// A string.
     String(String),
+
+    /// A number.
     Number(f64),
+
+    /// A vector.
     Vector(Vector3),
+
+    /// A color.
     Color(Color),
+
+    /// A boolean.
     Boolean(bool),
+
+    /// A dictionary.
     Dictionary(HashMap<String, Value>),
 }
 
 impl From<Value> for ast::Node {
     fn from(v: Value) -> Self {
         match v {
+            Value::Unit => Self::Unit,
             Value::String(s) => Self::String(s),
             Value::Number(n) => Self::Number(n),
             Value::Vector(v) => Self::Vector(
@@ -120,18 +135,22 @@ impl From<Value> for ast::Node {
 }
 
 impl Value {
-    fn from_node(interpreter: &Interpreter, node: ast::Node) -> Result<Self, InterpretError> {
+    fn from_node(
+        interpreter: &mut Interpreter,
+        scene: &mut Scene,
+        node: ast::Node,
+    ) -> Result<Self, InterpretError> {
         let value = match node {
             ast::Node::Identifier(name) => interpreter
                 .variable_value(&name)
                 .ok_or(InterpretError::UndefinedVariable(name))?,
-            ast::Node::Call(name, args) => interpreter.call_func(name, args)?,
+            ast::Node::Call(name, args) => interpreter.call_func(scene, name, args)?,
             ast::Node::String(s) => Self::String(s),
             ast::Node::Number(n) => Self::Number(n),
             ast::Node::Vector(x, y, z) => {
-                let x = Self::from_node(interpreter, *x)?;
-                let y = Self::from_node(interpreter, *y)?;
-                let z = Self::from_node(interpreter, *z)?;
+                let x = Self::from_node(interpreter, scene, *x)?;
+                let y = Self::from_node(interpreter, scene, *y)?;
+                let z = Self::from_node(interpreter, scene, *z)?;
                 Self::Vector(Vector3::new(
                     unwrap_variant!(x, Self::Number),
                     unwrap_variant!(y, Self::Number),
@@ -142,24 +161,30 @@ impl Value {
             ast::Node::Boolean(b) => Self::Boolean(b),
             ast::Node::Dictionary(m) => Self::Dictionary(
                 m.into_iter()
-                    .filter_map(|(k, v)| Value::from_node(interpreter, v).ok().map(|v| (k, v)))
+                    .filter_map(|(k, v)| {
+                        Value::from_node(interpreter, scene, v).ok().map(|v| (k, v))
+                    })
                     .collect(),
             ),
             // arithmetic operators
             ast::Node::Add(a, b) => Self::from_node(
                 interpreter,
+                scene,
                 ast::Node::Call(String::from("add"), vec![*a, *b]),
             )?,
             ast::Node::Sub(a, b) => Self::from_node(
                 interpreter,
+                scene,
                 ast::Node::Call(String::from("sub"), vec![*a, *b]),
             )?,
             ast::Node::Mul(a, b) => Self::from_node(
                 interpreter,
+                scene,
                 ast::Node::Call(String::from("mul"), vec![*a, *b]),
             )?,
             ast::Node::Div(a, b) => Self::from_node(
                 interpreter,
+                scene,
                 ast::Node::Call(String::from("div"), vec![*a, *b]),
             )?,
             _ => return Err(InterpretError::NonValueNode),
@@ -169,12 +194,13 @@ impl Value {
     }
 
     fn from_nodes(
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
+        scene: &mut Scene,
         nodes: Vec<ast::Node>,
     ) -> Result<Vec<Self>, InterpretError> {
         let mut values = vec![];
         for node in nodes.into_iter() {
-            values.push(Value::from_node(interpreter, node)?);
+            values.push(Value::from_node(interpreter, scene, node)?);
         }
         Ok(values)
     }
@@ -194,9 +220,19 @@ impl PartialEq<ast::NodeKind> for Value {
     }
 }
 
+/// A user-defined function.
+#[derive(Debug, Clone)]
+struct UserFunction {
+    params: Vec<String>,
+    body: Vec<ast::Node>,
+}
+
 /// A scope is a wrapper around a dictionary from identifier
 /// to AST node. The AST node is expected to be fully reduced.
-struct Scope(HashMap<String, Value>);
+struct Scope {
+    vars: HashMap<String, Value>,
+    funcs: HashMap<String, UserFunction>,
+}
 
 /// The image cache, that is, a map between file names and loaded images.
 type ImageCache = HashMap<String, ImageBuffer<Rgb<u8>, Vec<u8>>>;
@@ -207,7 +243,7 @@ type ImageCache = HashMap<String, ImageBuffer<Rgb<u8>, Vec<u8>>>;
 pub struct Interpreter {
     root: ast::Node,
     images: ImageCache,
-    stack: Vec<Scope>,
+    scope_stack: Vec<Scope>,
     object_names: Vec<String>,
 }
 
@@ -217,8 +253,8 @@ impl Interpreter {
     /// can operate on the root AST node.
     pub fn new<R: Read + Seek>(reader: R) -> Result<Self, InterpretError> {
         // inject constants into the global namespace
-        let stack = vec![Scope(
-            vec![
+        let stack = vec![Scope {
+            vars: vec![
                 (String::from("PI"), Value::Number(std::f64::consts::PI)),
                 (String::from("TAU"), Value::Number(std::f64::consts::TAU)),
                 (String::from("E"), Value::Number(std::f64::consts::E)),
@@ -226,18 +262,22 @@ impl Interpreter {
             ]
             .into_iter()
             .collect(),
-        )];
+            funcs: HashMap::new(),
+        }];
+
+        let tokens = Tokenizer::new(reader).tokenize()?;
+        println!("{:?}", tokens);
 
         Ok(Interpreter {
-            root: AstParser::new(Tokenizer::new(reader).tokenize()?).parse_root()?,
+            root: AstParser::new(tokens).parse_root()?,
             images: HashMap::new(),
-            stack,
+            scope_stack: stack,
             object_names: Vec::new(),
         })
     }
 
     pub fn set_global(&mut self, identifier: String, value: Value) {
-        self.stack[0].0.insert(identifier, value);
+        self.scope_stack[0].vars.insert(identifier, value);
     }
 
     /// Start execution of the interpreter.
@@ -285,7 +325,7 @@ impl Interpreter {
         &mut self,
         scene: &mut Scene,
         nodes: Vec<ast::Node>,
-    ) -> Result<(), InterpretError> {
+    ) -> Result<Value, InterpretError> {
         for node in nodes.into_iter() {
             match node {
                 ast::Node::Assign {
@@ -293,15 +333,19 @@ impl Interpreter {
                     declare,
                     value,
                 } => {
-                    let value = Value::from_node(self, *value)?;
+                    let value = Value::from_node(self, scene, *value)?;
                     if declare {
                         // set in the top-most stack
-                        self.stack.last_mut().unwrap().0.insert(name, value);
+                        self.scope_stack
+                            .last_mut()
+                            .unwrap()
+                            .vars
+                            .insert(name, value);
                     } else {
                         // assign to existing variable in nearest scope, or
                         // set it globally
-                        for (i, scope) in self.stack.iter_mut().enumerate().rev() {
-                            match scope.0.entry(name.clone()) {
+                        for (i, scope) in self.scope_stack.iter_mut().enumerate().rev() {
+                            match scope.vars.entry(name.clone()) {
                                 Entry::Occupied(mut ent) => {
                                     ent.insert(value);
                                     break;
@@ -321,25 +365,39 @@ impl Interpreter {
                     to,
                     body,
                 } => {
-                    let from = unwrap_variant!(Value::from_node(self, *from)?, Value::Number)
+                    let from = unwrap_variant!(Value::from_node(self, scene, *from)?, Value::Number)
                         .floor() as i32;
-                    let to =
-                        unwrap_variant!(Value::from_node(self, *to)?, Value::Number).floor() as i32;
+                    let to = unwrap_variant!(Value::from_node(self, scene, *to)?, Value::Number)
+                        .floor() as i32;
 
                     for i in from..to {
                         // push a new scope to the stack with the index variable
-                        self.stack.push(Scope(
-                            vec![(var.clone(), Value::Number(i as f64))]
+                        self.scope_stack.push(Scope {
+                            vars: vec![(var.clone(), Value::Number(i as f64))]
                                 .into_iter()
                                 .collect(),
-                        ));
+                            funcs: HashMap::new(),
+                        });
 
                         // run the scope body
                         self.run_scope(scene, body.clone())?;
 
                         // pop the scope from the stack
-                        self.stack.pop();
+                        self.scope_stack.pop();
                     }
+                }
+                ast::Node::Function { name, params, body } => {
+                    self.scope_stack
+                        .last_mut()
+                        .unwrap()
+                        .funcs
+                        .insert(name, UserFunction { params, body });
+                }
+                ast::Node::Return(value) => {
+                    return Ok(Value::from_node(self, scene, *value)?);
+                }
+                ast::Node::Call(name, args) => {
+                    self.call_func(scene, name, args)?;
                 }
                 ast::Node::Object {
                     name,
@@ -352,10 +410,16 @@ impl Interpreter {
                                 return Err(InterpretError::NonUniqueObject("scene"));
                             }
 
-                            let max_ray_depth =
-                                optional_property!(self, properties, "max_ray_depth", Number)
-                                    .map(|f| f as u32);
-                            let ambient = optional_property!(self, properties, "ambient", Color);
+                            let max_ray_depth = optional_property!(
+                                self,
+                                scene,
+                                properties,
+                                "max_ray_depth",
+                                Number
+                            )
+                            .map(|f| f as u32);
+                            let ambient =
+                                optional_property!(self, scene, properties, "ambient", Color);
 
                             if let Some(mrd) = max_ray_depth {
                                 scene.options.max_ray_depth = mrd;
@@ -370,14 +434,16 @@ impl Interpreter {
                                 return Err(InterpretError::NonUniqueObject("camera"));
                             }
 
-                            let vw = optional_property!(self, properties, "vw", Number)
+                            let vw = optional_property!(self, scene, properties, "vw", Number)
                                 .map(|f| f as i32);
-                            let vh = optional_property!(self, properties, "vh", Number)
+                            let vh = optional_property!(self, scene, properties, "vh", Number)
                                 .map(|f| f as i32);
-                            let origin = optional_property!(self, properties, "origin", Vector);
-                            let yaw = optional_property!(self, properties, "yaw", Number);
-                            let pitch = optional_property!(self, properties, "pitch", Number);
-                            let fov = optional_property!(self, properties, "fov", Number);
+                            let origin =
+                                optional_property!(self, scene, properties, "origin", Vector);
+                            let yaw = optional_property!(self, scene, properties, "yaw", Number);
+                            let pitch =
+                                optional_property!(self, scene, properties, "pitch", Number);
+                            let fov = optional_property!(self, scene, properties, "fov", Number);
 
                             if let Some(vw) = vw {
                                 scene.camera.vw = vw;
@@ -403,18 +469,19 @@ impl Interpreter {
                                 return Err(InterpretError::NonUniqueObject("skybox"));
                             }
 
-                            let t = required_property!(self, properties, "type", String);
+                            let t = required_property!(self, scene, properties, "type", String);
 
                             match t.as_str() {
                                 "normal" => scene.skybox = Box::new(skybox::Normal),
                                 "solid" => {
                                     let color =
-                                        required_property!(self, properties, "color", Color);
+                                        required_property!(self, scene, properties, "color", Color);
                                     scene.skybox = Box::new(skybox::Solid(color));
                                 }
                                 "cubemap" => {
-                                    let filename =
-                                        required_property!(self, properties, "image", String);
+                                    let filename = required_property!(
+                                        self, scene, properties, "image", String
+                                    );
                                     let img = match self.images.entry(filename) {
                                         Entry::Occupied(buf) => buf.get().clone(),
                                         Entry::Vacant(ent) => {
@@ -432,25 +499,28 @@ impl Interpreter {
 
                         // objects
                         "aabb" | "box" => {
-                            let pos = required_property!(self, properties, "position", Vector);
-                            let size = required_property!(self, properties, "size", Vector);
-                            let material = self.read_material(properties)?;
+                            let pos =
+                                required_property!(self, scene, properties, "position", Vector);
+                            let size = required_property!(self, scene, properties, "size", Vector);
+                            let material = self.read_material(scene, properties)?;
 
                             scene
                                 .objects
                                 .push(Box::new(object::Aabb::new(pos, size, material)));
                         }
                         "mesh" => {
-                            let obj = required_property!(self, properties, "obj", String);
-                            let position = optional_property!(self, properties, "position", Vector)
-                                .unwrap_or_else(|| Vector3::default());
+                            let obj = required_property!(self, scene, properties, "obj", String);
+                            let position =
+                                optional_property!(self, scene, properties, "position", Vector)
+                                    .unwrap_or_else(|| Vector3::default());
                             let scale =
-                                optional_property!(self, properties, "scale", Number).unwrap_or(1.);
+                                optional_property!(self, scene, properties, "scale", Number)
+                                    .unwrap_or(1.);
                             let rotate_xyz =
-                                optional_property!(self, properties, "rotate_xyz", Vector);
+                                optional_property!(self, scene, properties, "rotate_xyz", Vector);
                             let rotate_zyx =
-                                optional_property!(self, properties, "rotate_zyx", Vector);
-                            let material = self.read_material(properties)?;
+                                optional_property!(self, scene, properties, "rotate_zyx", Vector);
+                            let material = self.read_material(scene, properties)?;
 
                             let mut mesh = object::Mesh::from_obj(obj, material);
 
@@ -482,14 +552,17 @@ impl Interpreter {
                             scene.objects.push(Box::new(mesh));
                         }
                         "plane" => {
-                            let origin = required_property!(self, properties, "origin", Vector);
-                            let normal = optional_property!(self, properties, "normal", Vector)
-                                .unwrap_or_else(|| Vector3::new(0., 1., 0.))
-                                .normalize();
-                            let uv_wrap = optional_property!(self, properties, "uv_wrap", Number)
-                                .map(|f| f as f32)
-                                .unwrap_or(1.);
-                            let material = self.read_material(properties)?;
+                            let origin =
+                                required_property!(self, scene, properties, "origin", Vector);
+                            let normal =
+                                optional_property!(self, scene, properties, "normal", Vector)
+                                    .unwrap_or_else(|| Vector3::new(0., 1., 0.))
+                                    .normalize();
+                            let uv_wrap =
+                                optional_property!(self, scene, properties, "uv_wrap", Number)
+                                    .map(|f| f as f32)
+                                    .unwrap_or(1.);
+                            let material = self.read_material(scene, properties)?;
 
                             scene.objects.push(Box::new(object::Plane {
                                 origin,
@@ -499,9 +572,11 @@ impl Interpreter {
                             }));
                         }
                         "sphere" => {
-                            let pos = required_property!(self, properties, "position", Vector);
-                            let radius = required_property!(self, properties, "radius", Number);
-                            let material = self.read_material(properties)?;
+                            let pos =
+                                required_property!(self, scene, properties, "position", Vector);
+                            let radius =
+                                required_property!(self, scene, properties, "radius", Number);
+                            let material = self.read_material(scene, properties)?;
 
                             scene
                                 .objects
@@ -512,17 +587,28 @@ impl Interpreter {
                         "point_light" | "pointlight" => {
                             let default = lighting::Point::default();
 
-                            let color = optional_property!(self, properties, "color", Color);
+                            let color = optional_property!(self, scene, properties, "color", Color);
                             let intensity =
-                                optional_property!(self, properties, "intensity", Number);
-                            let specular_power =
-                                optional_property!(self, properties, "specular_power", Number)
-                                    .map(|f| f as i32);
-                            let specular_strength =
-                                optional_property!(self, properties, "specular_strength", Number);
-                            let position = required_property!(self, properties, "position", Vector);
+                                optional_property!(self, scene, properties, "intensity", Number);
+                            let specular_power = optional_property!(
+                                self,
+                                scene,
+                                properties,
+                                "specular_power",
+                                Number
+                            )
+                            .map(|f| f as i32);
+                            let specular_strength = optional_property!(
+                                self,
+                                scene,
+                                properties,
+                                "specular_strength",
+                                Number
+                            );
+                            let position =
+                                required_property!(self, scene, properties, "position", Vector);
                             let max_distance =
-                                optional_property!(self, properties, "max_distance", Number);
+                                optional_property!(self, scene, properties, "max_distance", Number);
 
                             let light = lighting::Point {
                                 color: color.unwrap_or(default.color),
@@ -539,19 +625,36 @@ impl Interpreter {
                         "sun" | "sun_light" | "sunlight" => {
                             let default = lighting::Sun::default();
 
-                            let color = optional_property!(self, properties, "color", Color);
+                            let color = optional_property!(self, scene, properties, "color", Color);
                             let intensity =
-                                optional_property!(self, properties, "intensity", Number);
-                            let specular_power =
-                                optional_property!(self, properties, "specular_power", Number)
-                                    .map(|f| f as i32);
-                            let specular_strength =
-                                optional_property!(self, properties, "specular_strength", Number);
+                                optional_property!(self, scene, properties, "intensity", Number);
+                            let specular_power = optional_property!(
+                                self,
+                                scene,
+                                properties,
+                                "specular_power",
+                                Number
+                            )
+                            .map(|f| f as i32);
+                            let specular_strength = optional_property!(
+                                self,
+                                scene,
+                                properties,
+                                "specular_strength",
+                                Number
+                            );
                             let vector =
-                                required_property!(self, properties, "vector", Vector).normalize();
-                            let shadows = optional_property!(self, properties, "shadows", Boolean);
-                            let shadow_coefficient =
-                                optional_property!(self, properties, "shadow_coefficient", Number);
+                                required_property!(self, scene, properties, "vector", Vector)
+                                    .normalize();
+                            let shadows =
+                                optional_property!(self, scene, properties, "shadows", Boolean);
+                            let shadow_coefficient = optional_property!(
+                                self,
+                                scene,
+                                properties,
+                                "shadow_coefficient",
+                                Number
+                            );
 
                             let light = lighting::Sun {
                                 color: color.unwrap_or(default.color),
@@ -570,34 +673,45 @@ impl Interpreter {
                         "area_light" | "arealight" => {
                             let default = lighting::Area::default();
 
-                            let color = optional_property!(self, properties, "color", Color);
+                            let color = optional_property!(self, scene, properties, "color", Color);
                             let intensity =
-                                optional_property!(self, properties, "intensity", Number);
-                            let specular_power =
-                                optional_property!(self, properties, "specular_power", Number)
-                                    .map(|f| f as i32);
-                            let specular_strength =
-                                optional_property!(self, properties, "specular_strength", Number);
-                            let surface =
-                                match required_property!(self, properties, "surface", String)
-                                    .as_str()
-                                {
-                                    "sphere" => AreaSurface::Sphere(
-                                        required_property!(self, properties, "position", Vector),
-                                        required_property!(self, properties, "radius", Number),
-                                    ),
-                                    "rectangle" => AreaSurface::Rectangle([
-                                        required_property!(self, properties, "c00", Vector),
-                                        required_property!(self, properties, "c01", Vector),
-                                        required_property!(self, properties, "c10", Vector),
-                                        required_property!(self, properties, "c11", Vector),
-                                    ]),
-                                    _ => return Err(InterpretError::InvalidMaterials),
-                                };
+                                optional_property!(self, scene, properties, "intensity", Number);
+                            let specular_power = optional_property!(
+                                self,
+                                scene,
+                                properties,
+                                "specular_power",
+                                Number
+                            )
+                            .map(|f| f as i32);
+                            let specular_strength = optional_property!(
+                                self,
+                                scene,
+                                properties,
+                                "specular_strength",
+                                Number
+                            );
+                            let surface = match required_property!(
+                                self, scene, properties, "surface", String
+                            )
+                            .as_str()
+                            {
+                                "sphere" => AreaSurface::Sphere(
+                                    required_property!(self, scene, properties, "position", Vector),
+                                    required_property!(self, scene, properties, "radius", Number),
+                                ),
+                                "rectangle" => AreaSurface::Rectangle([
+                                    required_property!(self, scene, properties, "c00", Vector),
+                                    required_property!(self, scene, properties, "c01", Vector),
+                                    required_property!(self, scene, properties, "c10", Vector),
+                                    required_property!(self, scene, properties, "c11", Vector),
+                                ]),
+                                _ => return Err(InterpretError::InvalidMaterials),
+                            };
                             let iterations =
-                                optional_property!(self, properties, "iterations", Number);
+                                optional_property!(self, scene, properties, "iterations", Number);
                             let max_distance =
-                                optional_property!(self, properties, "max_distance", Number);
+                                optional_property!(self, scene, properties, "max_distance", Number);
 
                             let light = lighting::Area {
                                 color: color.unwrap_or(default.color),
@@ -623,25 +737,27 @@ impl Interpreter {
             }
         }
 
-        Ok(())
+        Ok(Value::Unit)
     }
 
     /// Read a material from a dictionary node.
     fn read_material(
         &mut self,
+        scene: &mut Scene,
         mut properties: HashMap<String, ast::Node>,
     ) -> Result<Material, InterpretError> {
         match properties.remove("material") {
             Some(ast::Node::Dictionary(mut map)) => {
                 let reflectiveness =
-                    optional_property!(self, map, "reflectiveness", Number).unwrap_or(0.);
+                    optional_property!(self, scene, map, "reflectiveness", Number).unwrap_or(0.);
                 let transparency =
-                    optional_property!(self, map, "transparency", Number).unwrap_or(0.);
-                let ior = optional_property!(self, map, "ior", Number).unwrap_or(1.5);
-                let emissivity = optional_property!(self, map, "emissivity", Number).unwrap_or(0.);
+                    optional_property!(self, scene, map, "transparency", Number).unwrap_or(0.);
+                let ior = optional_property!(self, scene, map, "ior", Number).unwrap_or(1.5);
+                let emissivity =
+                    optional_property!(self, scene, map, "emissivity", Number).unwrap_or(0.);
 
                 let texture = match map.remove("texture") {
-                    Some(node) => self.read_texture(node)?,
+                    Some(node) => self.read_texture(scene, node)?,
                     None => Texture::Solid(Color::white()),
                 };
 
@@ -661,21 +777,22 @@ impl Interpreter {
     /// Read a texture from a call node.
     ///
     /// A texture can be `solid(color(r, g, b))` or `checkerboard(color(r, g, b), color(r, g, b))`.
-    fn read_texture(&mut self, node: ast::Node) -> Result<Texture, InterpretError> {
+    fn read_texture(
+        &mut self,
+        scene: &mut Scene,
+        node: ast::Node,
+    ) -> Result<Texture, InterpretError> {
         match node {
             ast::Node::Call(name, args) => match name.as_str() {
                 "solid" => {
-                    let args = self.deconstruct_args(
-                        Value::from_nodes(self, args)?,
-                        &[ast::NodeKind::Color],
-                    )?;
+                    let value = Value::from_nodes(self, scene, args)?;
+                    let args = self.deconstruct_args(value, &[ast::NodeKind::Color])?;
                     Ok(Texture::Solid(unwrap_variant!(args[0], Value::Color)))
                 }
                 "checkerboard" => {
-                    let args = self.deconstruct_args(
-                        Value::from_nodes(self, args)?,
-                        &[ast::NodeKind::Color, ast::NodeKind::Color],
-                    )?;
+                    let value = Value::from_nodes(self, scene, args)?;
+                    let args = self
+                        .deconstruct_args(value, &[ast::NodeKind::Color, ast::NodeKind::Color])?;
 
                     Ok(Texture::Checkerboard(
                         unwrap_variant!(args[0], Value::Color),
@@ -683,10 +800,8 @@ impl Interpreter {
                     ))
                 }
                 "image" => {
-                    let args = self.deconstruct_args(
-                        Value::from_nodes(self, args)?,
-                        &[ast::NodeKind::String],
-                    )?;
+                    let value = Value::from_nodes(self, scene, args)?;
+                    let args = self.deconstruct_args(value, &[ast::NodeKind::String])?;
 
                     match self.images.entry(unwrap_variant!(
                         args.into_iter().next().unwrap(),
@@ -708,7 +823,12 @@ impl Interpreter {
 
     /// Call a named function with some arguments.
     /// Its result is another node that can be used as other values.
-    fn call_func(&self, name: String, args: Vec<ast::Node>) -> Result<Value, InterpretError> {
+    fn call_func(
+        &mut self,
+        scene: &mut Scene,
+        name: String,
+        args: Vec<ast::Node>,
+    ) -> Result<Value, InterpretError> {
         macro_rules! float_func {
             ($n:ident) => {
                 |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number).$n()))
@@ -834,7 +954,7 @@ impl Interpreter {
             ];
         }
 
-        let values = Value::from_nodes(self, args)?;
+        let values = Value::from_nodes(self, scene, args)?;
 
         for func in FUNCTIONS
             .iter()
@@ -843,6 +963,33 @@ impl Interpreter {
             if let Some(r) = func.try_eval(values.clone()) {
                 return r;
             }
+        }
+
+        let func = self
+            .scope_stack
+            .iter()
+            .rev()
+            .filter_map(|s| s.funcs.iter().find(|(n, _)| n == &&name).map(|(_, f)| f))
+            .next()
+            .cloned();
+
+        if let Some(func) = func {
+            // make a new scope, inject the parameter values, and run the body
+            let new_scope = Scope {
+                vars: func
+                    .params
+                    .clone()
+                    .into_iter()
+                    .zip(values.clone().into_iter())
+                    .collect(),
+                funcs: HashMap::new(),
+            };
+
+            self.scope_stack.push(new_scope);
+            let ret = self.run_scope(scene, func.body.clone())?;
+            self.scope_stack.pop();
+
+            return Ok(ret);
         }
 
         return Err(InterpretError::UnknownFunction(name));
@@ -890,6 +1037,7 @@ impl Interpreter {
     /// Fetch an optional property out of a properties dictionary.
     fn optional_property(
         &mut self,
+        scene: &mut Scene,
         properties: &mut HashMap<String, ast::Node>,
         name: &'static str,
         kind: ast::NodeKind,
@@ -912,7 +1060,7 @@ impl Interpreter {
 
         match properties.remove(name) {
             Some(node) => {
-                let value = Value::from_node(self, node)?;
+                let value = Value::from_node(self, scene, node)?;
                 match_kinds!(kind, value, Boolean, Color, Dictionary, Number, String, Vector,)
             }
             None => Ok(None),
@@ -922,8 +1070,8 @@ impl Interpreter {
     /// Gets the value of a variable, somewhere along the stack, moving backwards.
     /// This clones the value of the variable.
     fn variable_value(&self, identifier: &String) -> Option<Value> {
-        for scope in self.stack.iter().rev() {
-            if let Some(value) = scope.0.get(identifier) {
+        for scope in self.scope_stack.iter().rev() {
+            if let Some(value) = scope.vars.get(identifier) {
                 return Some(value.to_owned());
             }
         }

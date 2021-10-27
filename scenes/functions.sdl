@@ -1,0 +1,9 @@
+let ball_origin = <0, 0, -10>
+
+fn ball(position) {
+    sphere { position, radius: 1 }
+}
+
+for n in -3 to 4 {
+    ball(ball_origin + <n * 2, 0, 0>)
+}

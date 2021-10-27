@@ -71,6 +71,16 @@ pub enum Node {
         body: Vec<Node>,
     },
 
+    /// A function declaration.
+    Function {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Node>,
+    },
+
+    /// A return statement.
+    Return(Box<Node>),
+
     /// A dictionary. It acts as a map whose keys are identifiers and whose values are more AST nodes.
     Dictionary(HashMap<String, Node>),
 
@@ -94,6 +104,9 @@ pub enum Node {
 
     /// A boolean.
     Boolean(bool),
+
+    /// The unit type, ().
+    Unit,
 
     /// A scope terminator.
     ScopeTerminator,
@@ -162,10 +175,11 @@ impl AstParser {
         while let Ok(token) = self.next() {
             match token {
                 Token::Identifier(identifier) => {
-                    // once we read the identifier, we have to consider two cases:
+                    // once we read the identifier, we have to consider some cases:
                     // 1. the user is trying to create a scene object
                     // 2. the user is trying to set the value of a variable
                     // 3. we are using some sort of loop or condition
+                    // 4. the user is defining a function
                     match identifier.as_str() {
                         "for" => {
                             let ident = match self.next()? {
@@ -221,6 +235,51 @@ impl AstParser {
 
                             continue;
                         }
+                        "fn" => {
+                            let ident = match self.next()? {
+                                Token::Identifier(i) => i,
+                                t => {
+                                    return Err(AstError::UnexpectedToken(
+                                        "an identifier".into(),
+                                        t,
+                                    ))
+                                }
+                            };
+
+                            self.read_expecting(Token::Sep(Sep::ParensOpen))?;
+
+                            let params = self.read_list(
+                                |s| match s.next() {
+                                    Ok(Token::Identifier(i)) => Ok(i),
+                                    Err(e) => Err(e),
+                                    Ok(t) => {
+                                        Err(AstError::UnexpectedToken("an identifer".into(), t))
+                                    }
+                                },
+                                |s| s.read_sep(Sep::Comma),
+                                Token::Sep(Sep::ParensClose),
+                            )?;
+
+                            self.read_expecting(Token::Sep(Sep::BraceOpen))?;
+                            let body = self.parse_scope()?;
+                            match body.last() {
+                                Some(Node::ScopeTerminator) => (),
+                                _ => return Err(AstError::UnexpectedEof),
+                            }
+
+                            nodes.push(Node::Function {
+                                name: ident,
+                                params,
+                                body,
+                            });
+
+                            continue;
+                        }
+                        "return" => {
+                            nodes.push(Node::Return(Box::new(self.parse_value()?)));
+
+                            continue;
+                        }
                         _ => (),
                     }
 
@@ -233,7 +292,57 @@ impl AstParser {
                                 value: Box::new(self.parse_value()?),
                             })
                         }
-                        _ => nodes.push(self.read_object(identifier)?),
+                        Some(Token::Sep(Sep::BraceOpen)) => {
+                            nodes.push(self.read_object(identifier)?)
+                        }
+                        Some(Token::Sep(Sep::ParensOpen)) => {
+                            self.tokens.next();
+                            let mut v = Vec::new();
+
+                            loop {
+                                // if we hit the close token, stop the loop early
+                                if let Some(t) = self.tokens.peek() {
+                                    if t == &Token::Sep(Sep::ParensClose) {
+                                        self.next()?;
+                                        break;
+                                    }
+                                }
+
+                                // continuously scan for more items
+                                let (next_item, ct) = match self.parse_value() {
+                                    Ok(v) => (v, true),
+                                    Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => {
+                                        (v, false)
+                                    }
+                                    Err(e) => return Err(e),
+                                };
+                                v.push(next_item);
+
+                                if !ct {
+                                    break;
+                                }
+
+                                // if we hit the close token, stop the loop, just like before
+                                if let Some(t) = self.tokens.peek() {
+                                    if t == &Token::Sep(Sep::ParensClose) {
+                                        self.next()?;
+                                        break;
+                                    }
+                                }
+
+                                // if the next token wasn't the close token, expect the delimiter
+                                self.read_sep(Sep::Comma)?;
+                            }
+
+                            nodes.push(Node::Call(identifier, v));
+                        }
+                        Some(_) => {
+                            return Err(AstError::UnexpectedToken(
+                                String::from("something valid in a scope"),
+                                self.tokens.next().unwrap(),
+                            ))
+                        }
+                        _ => (),
                     }
                 }
                 Token::Sep(Sep::BraceClose) => {

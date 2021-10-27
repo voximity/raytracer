@@ -60,7 +60,7 @@ impl Intersect for Plane {
                     self.normal * -denom.signum(),
                     (t, p),
                     (t, p),
-                    if self.normal.z != 0. {
+                    if self.normal.y != 0. {
                         (
                             (p.x as f32 / self.uv_wrap).rem_euclid(1.),
                             (p.z as f32 / self.uv_wrap).rem_euclid(1.),

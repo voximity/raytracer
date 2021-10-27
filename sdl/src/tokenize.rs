@@ -7,10 +7,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum TokenizeError {
-    #[error("a generic IO error")]
+    #[error("generic IO error: {0}")]
     Io(#[from] io::Error),
 
-    #[error("unexpected character")]
+    #[error("unexpected character {0}")]
     UnexpectedCharacter(char),
 
     #[error("error parsing number")]
