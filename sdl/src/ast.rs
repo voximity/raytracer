@@ -14,15 +14,29 @@ enum Associativity {
 }
 
 lazy_static! {
-    static ref OP_PRECEDENCE: HashMap<Op, u8> =
-        vec![(Op::Mul, 2), (Op::Div, 2), (Op::Add, 1), (Op::Sub, 1),]
-            .into_iter()
-            .collect::<HashMap<_, _>>();
+    static ref OP_PRECEDENCE: HashMap<Op, u8> = vec![
+        (Op::Mul, 3),
+        (Op::Div, 3),
+        (Op::Mod, 3),
+        (Op::Add, 2),
+        (Op::Sub, 2),
+        (Op::Eq, 1),
+        (Op::Neq, 1),
+        (Op::Gt, 1),
+        (Op::Lt, 1),
+        (Op::GtEq, 1),
+        (Op::LtEq, 1),
+        (Op::And, 0),
+        (Op::Or, 0),
+    ]
+    .into_iter()
+    .collect::<HashMap<_, _>>();
     static ref OP_ASSOCIATIVITY: HashMap<Op, Associativity> = vec![
         (Op::Add, Associativity::Left),
         (Op::Sub, Associativity::Left),
         (Op::Mul, Associativity::Left),
         (Op::Div, Associativity::Left),
+        (Op::Mod, Associativity::Left),
     ]
     .into_iter()
     .collect::<HashMap<_, _>>();
@@ -71,6 +85,15 @@ pub enum Node {
         body: Vec<Node>,
     },
 
+    /// An if statement.
+    If {
+        /// The condition-body pairs.
+        cond_bodies: Vec<(Box<Node>, Vec<Node>)>,
+
+        /// The else body, if any, of this if-statement.
+        else_body: Option<Vec<Node>>,
+    },
+
     /// A function declaration.
     Function {
         name: String,
@@ -111,6 +134,7 @@ pub enum Node {
     /// A scope terminator.
     ScopeTerminator,
 
+    // Arithmetic
     /// The addition of two nodes.
     Add(Box<Node>, Box<Node>),
 
@@ -122,6 +146,35 @@ pub enum Node {
 
     /// The division of two nodes.
     Div(Box<Node>, Box<Node>),
+
+    /// The modulo of two nodes.
+    Mod(Box<Node>, Box<Node>),
+
+    // Comparison
+    /// Equality of two nodes.
+    Eq(Box<Node>, Box<Node>),
+
+    /// Negative equality of two nodes.
+    Neq(Box<Node>, Box<Node>),
+
+    /// Greater than comparison of two nodes.
+    Gt(Box<Node>, Box<Node>),
+
+    /// Less than comparison of two nodes.
+    Lt(Box<Node>, Box<Node>),
+
+    /// Greater than comparison of two nodes.
+    GtEq(Box<Node>, Box<Node>),
+
+    /// Less than comparison of two nodes.
+    LtEq(Box<Node>, Box<Node>),
+
+    // Logic
+    /// Logical AND of two nodes.
+    And(Box<Node>, Box<Node>),
+
+    /// Logical OR of two nodes.
+    Or(Box<Node>, Box<Node>),
 }
 
 /// A kind of node *value*, rather than just any node. Used to allow functions to specify
@@ -194,9 +247,9 @@ impl AstParser {
 
                             self.read_expecting(Token::Identifier("in".into()))?;
 
-                            let from = self.parse_value()?;
+                            let from = self.parse_value(true)?;
                             self.read_expecting(Token::Identifier("to".into()))?;
-                            let to = self.parse_value()?;
+                            let to = self.parse_value(true)?;
 
                             self.read_expecting(Token::Sep(Sep::BraceOpen))?;
                             let body = self.parse_scope()?;
@@ -210,6 +263,61 @@ impl AstParser {
                                 from: Box::new(from),
                                 to: Box::new(to),
                                 body,
+                            });
+
+                            continue;
+                        }
+                        "if" => {
+                            let condition = self.parse_value(true)?;
+
+                            self.read_expecting(Token::Sep(Sep::BraceOpen))?;
+
+                            let body = self.parse_scope()?;
+                            match body.last() {
+                                Some(Node::ScopeTerminator) => (),
+                                _ => return Err(AstError::UnexpectedEof),
+                            }
+
+                            let mut cond_bodies = vec![(Box::new(condition), body)];
+                            let mut else_body = None;
+
+                            loop {
+                                match self.tokens.peek() {
+                                    Some(Token::Identifier(i)) if i == "else" => {
+                                        self.next()?;
+                                        match self.next()? {
+                                            Token::Identifier(i) if i == "if" => {
+                                                let condition = self.parse_value(true)?;
+                                                self.read_expecting(Token::Sep(Sep::BraceOpen))?;
+
+                                                let body = self.parse_scope()?;
+                                                match body.last() {
+                                                    Some(Node::ScopeTerminator) => (),
+                                                    _ => return Err(AstError::UnexpectedEof),
+                                                }
+
+                                                cond_bodies.push((Box::new(condition), body));
+                                            }
+                                            Token::Sep(Sep::BraceOpen) => {
+                                                let body = self.parse_scope()?;
+                                                match body.last() {
+                                                    Some(Node::ScopeTerminator) => (),
+                                                    _ => return Err(AstError::UnexpectedEof),
+                                                }
+
+                                                let _ = else_body.insert(body);
+                                                break;
+                                            }
+                                            t => return Err(AstError::UnexpectedToken("`if` or opening brace".into(), t)),
+                                        }
+                                    },
+                                    _ => break,
+                                }
+                            }
+
+                            nodes.push(Node::If {
+                                cond_bodies,
+                                else_body,
                             });
 
                             continue;
@@ -230,7 +338,7 @@ impl AstParser {
                             nodes.push(Node::Assign {
                                 name: ident,
                                 declare: true,
-                                value: Box::new(self.parse_value()?),
+                                value: Box::new(self.parse_value(true)?),
                             });
 
                             continue;
@@ -276,7 +384,7 @@ impl AstParser {
                             continue;
                         }
                         "return" => {
-                            nodes.push(Node::Return(Box::new(self.parse_value()?)));
+                            nodes.push(Node::Return(Box::new(self.parse_value(true)?)));
 
                             continue;
                         }
@@ -289,7 +397,7 @@ impl AstParser {
                             nodes.push(Node::Assign {
                                 name: identifier,
                                 declare: false,
-                                value: Box::new(self.parse_value()?),
+                                value: Box::new(self.parse_value(true)?),
                             })
                         }
                         Some(Token::Sep(Sep::BraceOpen)) => {
@@ -309,7 +417,7 @@ impl AstParser {
                                 }
 
                                 // continuously scan for more items
-                                let (next_item, ct) = match self.parse_value() {
+                                let (next_item, ct) = match self.parse_value(true) {
                                     Ok(v) => (v, true),
                                     Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => {
                                         (v, false)
@@ -362,9 +470,51 @@ impl AstParser {
     }
 
     /// Parse any "value": effectively an expression that has some value.
-    fn parse_value(&mut self) -> Result<Node, AstError> {
+    fn parse_value(&mut self, logic: bool) -> Result<Node, AstError> {
         let mut op_stack: Vec<Token> = vec![];
         let mut out_queue: Vec<Node> = vec![];
+
+        macro_rules! lr_op {
+            ($n:ident, $out:ident) => {{
+                let b = $out.pop().unwrap();
+                let a = $out.pop().unwrap();
+                $out.push(Node::$n(Box::new(a), Box::new(b)));
+            }};
+        }
+
+        macro_rules! match_op_nolog {
+            ($top:expr, $out:ident) => {
+                match $top {
+                    Token::Op(Op::Add) => lr_op!(Add, $out),
+                    Token::Op(Op::Sub) => lr_op!(Sub, $out),
+                    Token::Op(Op::Mul) => lr_op!(Mul, $out),
+                    Token::Op(Op::Div) => lr_op!(Div, $out),
+                    Token::Op(Op::Mod) => lr_op!(Mod, $out),
+                    _ => unimplemented!(),
+                }
+            };
+        }
+
+        macro_rules! match_op {
+            ($top:expr, $out:ident) => {
+                match $top {
+                    Token::Op(Op::Add) => lr_op!(Add, $out),
+                    Token::Op(Op::Sub) => lr_op!(Sub, $out),
+                    Token::Op(Op::Mul) => lr_op!(Mul, $out),
+                    Token::Op(Op::Div) => lr_op!(Div, $out),
+                    Token::Op(Op::Mod) => lr_op!(Mod, $out),
+                    Token::Op(Op::Eq) => lr_op!(Eq, $out),
+                    Token::Op(Op::Neq) => lr_op!(Neq, $out),
+                    Token::Op(Op::Gt) => lr_op!(Gt, $out),
+                    Token::Op(Op::Lt) => lr_op!(Lt, $out),
+                    Token::Op(Op::GtEq) => lr_op!(GtEq, $out),
+                    Token::Op(Op::LtEq) => lr_op!(LtEq, $out),
+                    Token::Op(Op::And) => lr_op!(And, $out),
+                    Token::Op(Op::Or) => lr_op!(Or, $out),
+                    _ => unimplemented!(),
+                }
+            };
+        }
 
         let mut last_op = true;
         loop {
@@ -423,12 +573,8 @@ impl AstParser {
 
                     out_queue.push(self.read_dict()?);
                 }
-                Token::Op(Op::Lt) => {
-                    if !last_op {
-                        break;
-                    } else {
-                        last_op = false;
-                    }
+                Token::Op(Op::Lt) if last_op => {
+                    last_op = false;
 
                     self.next()?;
                     out_queue.push(self.read_vector()?);
@@ -460,7 +606,7 @@ impl AstParser {
                             }
 
                             // continuously scan for more items
-                            let (next_item, ct) = match self.parse_value() {
+                            let (next_item, ct) = match self.parse_value(true) {
                                 Ok(v) => (v, true),
                                 Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => {
                                     (v, false)
@@ -492,62 +638,62 @@ impl AstParser {
                 }
                 Token::Op(op) => {
                     // this token is an operator, match it further
-                    match op {
-                        Op::Add | Op::Sub | Op::Mul | Op::Div => {
-                            last_op = true;
+                    let matches = match op {
+                        Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Mod => true,
+                        op => {
+                            if logic {
+                                match op {
+                                    Op::Eq
+                                    | Op::Neq
+                                    | Op::Lt
+                                    | Op::Gt
+                                    | Op::LtEq
+                                    | Op::GtEq
+                                    | Op::And
+                                    | Op::Or => true,
+                                    _ => false,
+                                }
+                            } else {
+                                false
+                            }
+                        }
+                    };
+                    if matches {
+                        last_op = true;
 
-                            let op = match self.next()? {
-                                Token::Op(op) => op,
-                                _ => unreachable!(),
+                        let op = match self.next()? {
+                            Token::Op(op) => op,
+                            _ => unreachable!(),
+                        };
+
+                        loop {
+                            let condition = match op_stack.last() {
+                                None => false,
+                                Some(Token::Sep(Sep::ParensOpen)) => false,
+                                Some(Token::Op(top)) => {
+                                    let top_precedence = &OP_PRECEDENCE[top];
+                                    let op_precedence = &OP_PRECEDENCE[&op];
+                                    top_precedence > op_precedence
+                                        || (top_precedence == op_precedence
+                                            && OP_ASSOCIATIVITY[&op] == Associativity::Left)
+                                }
+                                _ => unimplemented!(),
                             };
 
-                            loop {
-                                let condition = match op_stack.last() {
-                                    None => false,
-                                    Some(Token::Sep(Sep::ParensOpen)) => false,
-                                    Some(Token::Op(top)) => {
-                                        let top_precedence = &OP_PRECEDENCE[top];
-                                        let op_precedence = &OP_PRECEDENCE[&op];
-                                        top_precedence > op_precedence
-                                            || (top_precedence == op_precedence
-                                                && OP_ASSOCIATIVITY[&op] == Associativity::Left)
-                                    }
-                                    _ => unimplemented!(),
-                                };
-
-                                if !condition {
-                                    break;
-                                }
-
-                                let top_op_stack = op_stack.pop().unwrap();
-                                match top_op_stack {
-                                    Token::Op(Op::Add) => {
-                                        let b = out_queue.pop().unwrap();
-                                        let a = out_queue.pop().unwrap();
-                                        out_queue.push(Node::Add(Box::new(a), Box::new(b)));
-                                    }
-                                    Token::Op(Op::Sub) => {
-                                        let b = out_queue.pop().unwrap();
-                                        let a = out_queue.pop().unwrap();
-                                        out_queue.push(Node::Sub(Box::new(a), Box::new(b)));
-                                    }
-                                    Token::Op(Op::Mul) => {
-                                        let b = out_queue.pop().unwrap();
-                                        let a = out_queue.pop().unwrap();
-                                        out_queue.push(Node::Mul(Box::new(a), Box::new(b)));
-                                    }
-                                    Token::Op(Op::Div) => {
-                                        let b = out_queue.pop().unwrap();
-                                        let a = out_queue.pop().unwrap();
-                                        out_queue.push(Node::Div(Box::new(a), Box::new(b)));
-                                    }
-                                    _ => unimplemented!(),
-                                }
+                            if !condition {
+                                break;
                             }
 
-                            op_stack.push(Token::Op(op));
+                            if logic {
+                                match_op!(op_stack.pop().unwrap(), out_queue);
+                            } else {
+                                match_op_nolog!(op_stack.pop().unwrap(), out_queue);
+                            }
                         }
-                        _ => break,
+
+                        op_stack.push(Token::Op(op));
+                    } else {
+                        break;
                     }
                 }
                 Token::Sep(Sep::ParensOpen) => {
@@ -577,29 +723,10 @@ impl AstParser {
                         }
 
                         // pop the operator from the operator stack into the output queue
-                        let top_op_stack = op_stack.pop().unwrap();
-                        match top_op_stack {
-                            Token::Op(Op::Add) => {
-                                let b = out_queue.pop().unwrap();
-                                let a = out_queue.pop().unwrap();
-                                out_queue.push(Node::Add(Box::new(a), Box::new(b)));
-                            }
-                            Token::Op(Op::Sub) => {
-                                let b = out_queue.pop().unwrap();
-                                let a = out_queue.pop().unwrap();
-                                out_queue.push(Node::Sub(Box::new(a), Box::new(b)));
-                            }
-                            Token::Op(Op::Mul) => {
-                                let b = out_queue.pop().unwrap();
-                                let a = out_queue.pop().unwrap();
-                                out_queue.push(Node::Mul(Box::new(a), Box::new(b)));
-                            }
-                            Token::Op(Op::Div) => {
-                                let b = out_queue.pop().unwrap();
-                                let a = out_queue.pop().unwrap();
-                                out_queue.push(Node::Div(Box::new(a), Box::new(b)));
-                            }
-                            _ => (),
+                        if logic {
+                            match_op!(op_stack.pop().unwrap(), out_queue);
+                        } else {
+                            match_op_nolog!(op_stack.pop().unwrap(), out_queue);
                         }
                     }
 
@@ -620,29 +747,10 @@ impl AstParser {
             if let Some(Token::Sep(Sep::ParensOpen)) = op_stack.last() {
                 return Err(AstError::ArithmeticError);
             } else {
-                let top_op_stack = op_stack.pop().unwrap();
-                match top_op_stack {
-                    Token::Op(Op::Add) => {
-                        let b = out_queue.pop().unwrap();
-                        let a = out_queue.pop().unwrap();
-                        out_queue.push(Node::Add(Box::new(a), Box::new(b)));
-                    }
-                    Token::Op(Op::Sub) => {
-                        let b = out_queue.pop().unwrap();
-                        let a = out_queue.pop().unwrap();
-                        out_queue.push(Node::Sub(Box::new(a), Box::new(b)));
-                    }
-                    Token::Op(Op::Mul) => {
-                        let b = out_queue.pop().unwrap();
-                        let a = out_queue.pop().unwrap();
-                        out_queue.push(Node::Mul(Box::new(a), Box::new(b)));
-                    }
-                    Token::Op(Op::Div) => {
-                        let b = out_queue.pop().unwrap();
-                        let a = out_queue.pop().unwrap();
-                        out_queue.push(Node::Div(Box::new(a), Box::new(b)));
-                    }
-                    _ => (),
+                if logic {
+                    match_op!(op_stack.pop().unwrap(), out_queue);
+                } else {
+                    match_op_nolog!(op_stack.pop().unwrap(), out_queue);
                 }
             }
         }
@@ -710,7 +818,7 @@ impl AstParser {
 
                 if let Some(Token::Sep(Sep::Colon)) = s.tokens.peek() {
                     s.next()?;
-                    Ok((key, s.parse_value()?))
+                    Ok((key, s.parse_value(true)?))
                 } else {
                     Ok((key.clone(), Node::Identifier(key)))
                 }
@@ -729,11 +837,11 @@ impl AstParser {
     /// <1.1, 2.4, 6.7>
     /// ```
     fn read_vector(&mut self) -> Result<Node, AstError> {
-        let x = self.parse_value()?;
+        let x = self.parse_value(false)?;
         self.read_sep(Sep::Comma)?;
-        let y = self.parse_value()?;
+        let y = self.parse_value(false)?;
         self.read_sep(Sep::Comma)?;
-        let z = self.parse_value()?;
+        let z = self.parse_value(false)?;
         self.read_expecting(Token::Op(Op::Gt))?;
 
         Ok(Node::Vector(Box::new(x), Box::new(y), Box::new(z)))

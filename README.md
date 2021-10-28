@@ -63,6 +63,7 @@ I'd like to add in the future:
   - [x] Variables
   - [x] Loops
   - [x] Functions
+  - [x] User-defined functions
 
 ## Progress
 

@@ -20,14 +20,29 @@ pub enum TokenizeError {
 /// An operator.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Op {
+    // Arithmetic
     Add,
     Sub,
     Mul,
     Div,
-    Lt,
-    Gt,
+    Mod,
+
+    // Miscellaneous
     Assign,
     RangeExclusive,
+
+    // Comparison
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    LtEq,
+    GtEq,
+
+    // Logic
+    Not,
+    And,
+    Or,
 }
 
 /// A separator.
@@ -81,11 +96,21 @@ impl Display for Token {
             Self::Op(Op::Sub) => write!(f, "-"),
             Self::Op(Op::Mul) => write!(f, "*"),
             Self::Op(Op::Div) => write!(f, "/"),
+            Self::Op(Op::Mod) => write!(f, "%"),
+
+            Self::Op(Op::Assign) => write!(f, "="),
+            Self::Op(Op::RangeExclusive) => write!(f, ".."),
 
             Self::Op(Op::Lt) => write!(f, "<"),
             Self::Op(Op::Gt) => write!(f, ">"),
-            Self::Op(Op::Assign) => write!(f, "="),
-            Self::Op(Op::RangeExclusive) => write!(f, ".."),
+            Self::Op(Op::Eq) => write!(f, "=="),
+            Self::Op(Op::Neq) => write!(f, "!="),
+            Self::Op(Op::LtEq) => write!(f, "<="),
+            Self::Op(Op::GtEq) => write!(f, ">="),
+
+            Self::Op(Op::And) => write!(f, "&&"),
+            Self::Op(Op::Or) => write!(f, "||"),
+            Self::Op(Op::Not) => write!(f, "!"),
 
             Self::Identifier(ident) => write!(f, "{}", ident),
             Self::String(str) => write!(f, "\"{}\"", str),
@@ -175,15 +200,31 @@ impl<R: Read + Seek> Tokenizer<R> {
                     tokens.push(Token::Op(Op::Div));
                     self.skip()?;
                 }
+                '%' => {
+                    tokens.push(Token::Op(Op::Mod));
+                    self.skip()?;
+                }
 
                 // other operators/separators
                 '<' => {
-                    tokens.push(Token::Op(Op::Lt));
                     self.skip()?;
+                    match self.peek_next() {
+                        Ok('=') => {
+                            tokens.push(Token::Op(Op::LtEq));
+                            self.skip()?;
+                        }
+                        _ => tokens.push(Token::Op(Op::Lt)),
+                    }
                 }
                 '>' => {
-                    tokens.push(Token::Op(Op::Gt));
                     self.skip()?;
+                    match self.peek_next() {
+                        Ok('=') => {
+                            tokens.push(Token::Op(Op::GtEq));
+                            self.skip()?;
+                        }
+                        _ => tokens.push(Token::Op(Op::Gt)),
+                    }
                 }
                 ',' => {
                     tokens.push(Sep::Comma.into());
@@ -218,8 +259,44 @@ impl<R: Read + Seek> Tokenizer<R> {
                     self.skip()?;
                 }
                 '=' => {
-                    tokens.push(Op::Assign.into());
                     self.skip()?;
+                    match self.peek_next() {
+                        Ok('=') => {
+                            tokens.push(Token::Op(Op::Eq));
+                            self.skip()?;
+                        }
+                        _ => tokens.push(Token::Op(Op::Assign)),
+                    }
+                }
+                '!' => {
+                    self.skip()?;
+                    match self.peek_next() {
+                        Ok('=') => {
+                            tokens.push(Token::Op(Op::Neq));
+                            self.skip()?;
+                        }
+                        _ => tokens.push(Token::Op(Op::Not)),
+                    }
+                }
+                '&' => {
+                    self.skip()?;
+                    match self.peek_next()? {
+                        '&' => {
+                            tokens.push(Token::Op(Op::And));
+                            self.skip()?;
+                        }
+                        x => return Err(TokenizeError::UnexpectedCharacter(x)),
+                    }
+                }
+                '|' => {
+                    self.skip()?;
+                    match self.peek_next()? {
+                        '|' => {
+                            tokens.push(Token::Op(Op::And));
+                            self.skip()?;
+                        }
+                        x => return Err(TokenizeError::UnexpectedCharacter(x)),
+                    }
                 }
                 '.' => {
                     self.skip()?;

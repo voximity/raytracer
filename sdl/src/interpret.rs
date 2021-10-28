@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     collections::{hash_map::Entry, HashMap},
     io::{Read, Seek},
 };
@@ -86,11 +87,17 @@ pub enum InterpretError {
 
     #[error("cannot convert AST node to a definite type")]
     NonValueNode,
+
+    #[error("bad comparison")]
+    BadComparison,
+
+    #[error("attempt to perform logic on non-boolean types")]
+    BadLogic,
 }
 
 /// A definite value, which has been reduced from
 /// an AST node that was a literal, a call, or a variable.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     /// The unit type. Represents no data.
     Unit,
@@ -140,6 +147,15 @@ impl Value {
         scene: &mut Scene,
         node: ast::Node,
     ) -> Result<Self, InterpretError> {
+        macro_rules! cmp_inner {
+            ($a:expr, $b:expr, $($variant:ident),+$(,)?) => {
+                match ($a, $b) {
+                    $((Value::$variant(a), Value::$variant(b)) => a.partial_cmp(&b),)+
+                    _ => return Err(InterpretError::BadComparison),
+                }
+            }
+        }
+
         let value = match node {
             ast::Node::Identifier(name) => interpreter
                 .variable_value(&name)
@@ -187,6 +203,82 @@ impl Value {
                 scene,
                 ast::Node::Call(String::from("div"), vec![*a, *b]),
             )?,
+            ast::Node::Mod(a, b) => Self::from_node(
+                interpreter,
+                scene,
+                ast::Node::Call(String::from("mod"), vec![*a, *b]),
+            )?,
+            // Comparison
+            ast::Node::Eq(a, b) => Self::Boolean(
+                Self::from_node(interpreter, scene, *a)?
+                    == Self::from_node(interpreter, scene, *b)?,
+            ),
+            ast::Node::Neq(a, b) => Self::Boolean(
+                Self::from_node(interpreter, scene, *a)?
+                    != Self::from_node(interpreter, scene, *b)?,
+            ),
+            ast::Node::Gt(a, b) => Self::Boolean(matches!(
+                cmp_inner!(
+                    Self::from_node(interpreter, scene, *a)?,
+                    Self::from_node(interpreter, scene, *b)?,
+                    String,
+                    Number,
+                    Boolean,
+                ),
+                Some(Ordering::Greater),
+            )),
+            ast::Node::Lt(a, b) => Self::Boolean(matches!(
+                cmp_inner!(
+                    Self::from_node(interpreter, scene, *a)?,
+                    Self::from_node(interpreter, scene, *b)?,
+                    String,
+                    Number,
+                    Boolean,
+                ),
+                Some(Ordering::Less),
+            )),
+            ast::Node::GtEq(a, b) => {
+                let ordering = cmp_inner!(
+                    Self::from_node(interpreter, scene, *a)?,
+                    Self::from_node(interpreter, scene, *b)?,
+                    String,
+                    Number,
+                    Boolean,
+                );
+
+                Self::Boolean(match ordering {
+                    Some(Ordering::Greater) | Some(Ordering::Equal) => true,
+                    _ => false,
+                })
+            }
+            ast::Node::LtEq(a, b) => {
+                let ordering = cmp_inner!(
+                    Self::from_node(interpreter, scene, *a)?,
+                    Self::from_node(interpreter, scene, *b)?,
+                    String,
+                    Number,
+                    Boolean,
+                );
+
+                Self::Boolean(match ordering {
+                    Some(Ordering::Less) | Some(Ordering::Equal) => true,
+                    _ => false,
+                })
+            }
+            ast::Node::And(a, b) => Self::Boolean(match Self::from_node(interpreter, scene, *a)? {
+                Self::Boolean(a) => match Self::from_node(interpreter, scene, *b)? {
+                    Self::Boolean(b) => a && b,
+                    _ => return Err(InterpretError::BadLogic),
+                },
+                _ => return Err(InterpretError::BadLogic),
+            }),
+            ast::Node::Or(a, b) => Self::Boolean(match Self::from_node(interpreter, scene, *a)? {
+                Self::Boolean(a) => match Self::from_node(interpreter, scene, *b)? {
+                    Self::Boolean(b) => a || b,
+                    _ => return Err(InterpretError::BadLogic),
+                },
+                _ => return Err(InterpretError::BadLogic),
+            }),
             _ => return Err(InterpretError::NonValueNode),
         };
 
@@ -203,6 +295,15 @@ impl Value {
             values.push(Value::from_node(interpreter, scene, node)?);
         }
         Ok(values)
+    }
+
+    fn is_truthy(&self) -> bool {
+        match self {
+            Self::Boolean(b) => *b,
+            Self::Number(n) => n != &0. && !n.is_nan(),
+            Self::Unit => false,
+            _ => true,
+        }
     }
 }
 
@@ -229,6 +330,7 @@ struct UserFunction {
 
 /// A scope is a wrapper around a dictionary from identifier
 /// to AST node. The AST node is expected to be fully reduced.
+#[derive(Default)]
 struct Scope {
     vars: HashMap<String, Value>,
     funcs: HashMap<String, UserFunction>,
@@ -382,6 +484,20 @@ impl Interpreter {
                         self.run_scope(scene, body.clone())?;
 
                         // pop the scope from the stack
+                        self.scope_stack.pop();
+                    }
+                }
+                ast::Node::If { cond_bodies, else_body } => {
+                    let mut run_body = None;
+                    for (cond, body) in cond_bodies.into_iter() {
+                        if Value::from_node(self, scene, *cond)?.is_truthy() {
+                            let _ = run_body.insert(body);
+                            break;
+                        }
+                    }
+                    if let Some(body) = run_body.or(else_body) {
+                        self.scope_stack.push(Scope::default());
+                        self.run_scope(scene, body)?;
                         self.scope_stack.pop();
                     }
                 }
@@ -869,6 +985,20 @@ impl Interpreter {
 
                 // string operators
                 Function::new(&["add"], &[NodeKind::String, NodeKind::String], |v| Ok(Value::String(format!("{}{}", unwrap_variant!(&v[0], Value::String), unwrap_variant!(&v[1], Value::String))))),
+
+                // printing
+                Function::new(&["print"], &[NodeKind::String], |v| {
+                    println!("{}", unwrap_variant!(&v[0], Value::String));
+                    Ok(Value::Unit)
+                }),
+                Function::new(&["print"], &[NodeKind::Number], |v| {
+                    println!("{}", unwrap_variant!(&v[0], Value::Number));
+                    Ok(Value::Unit)
+                }),
+                Function::new(&["print"], &[NodeKind::Boolean], |v| {
+                    println!("{}", unwrap_variant!(&v[0], Value::Boolean));
+                    Ok(Value::Unit)
+                }),
 
                 // constructors
                 Function::new(&["color", "rgb"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |v| {
