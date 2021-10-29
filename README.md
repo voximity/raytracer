@@ -348,3 +348,25 @@ sphere {
     }
 }
 ```
+
+#### 10/28/2021
+
+Since my last progress update, I have added a number of features to the SDL, as well as a few rendering features.
+I've added area lights (with a shoddy implementation) as well as user-defined functions, comparison operators,
+logic operators, if/if-else/if-else-if/if-else-if-else statements, and probably more.
+
+Here's an example of fizz-buzz implemented in the scene description language:
+
+```
+for n in 1 to 50 {
+    if n % 3 == 0 && n % 5 == 0 {
+        print("FizzBuzz")
+    } else if n % 3 == 0 {
+        print("Fizz")
+    } else if n % 5 == 0 {
+        print("Buzz")
+    } else {
+        print(n)
+    }
+}
+```

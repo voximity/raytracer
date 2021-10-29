@@ -48,8 +48,8 @@ As far as values go, there are a few primitive types:
 
 ## Variables
 
-In any scope, variables can be set simply with the syntax `identifer = value`, like `tau = mul(PI, 2)`.
-Local variables can be declared by prefixing the keyword `let`, i.e. `let y = mul(2, x)`. Variables can
+In any scope, variables can be set simply with the syntax `identifer = value`, like `tau = PI * 2`.
+Local variables can be declared by prefixing the keyword `let`, i.e. `let y = x * 2`. Variables can
 be updated in scopes of the same or greater depth by omitting the `let` keyword.
 
 Later, the variable can be used in dictionaries as values, as function arguments, and so on.
@@ -71,10 +71,11 @@ There are a number of functions that can be used as values.
 
 #### Operators
 
-* `add(x, y)` adds two values together
-* `sub(x, y)` subtracts two values from one another
-* `mul(x, y)` multiplies two values together
-* `div(x, y)` divides two values from each other
+* `add(x, y)` adds two values together (alternatively, use +)
+* `sub(x, y)` subtracts two values from one another (alternatively, -)
+* `mul(x, y)` multiplies two values together (\*)
+* `div(x, y)` divides two values from each other (/)
+* `mod(x, y)` modulo of two values (%)
 
 #### Constructors
 
@@ -98,6 +99,55 @@ There are a number of functions that can be used as values.
 * `normalize(v)` returns a normalized v
 * `magnitude(v)` returns the magnitude of v
 * `angle(a, b)` returns the angle between vectors a and b
+
+#### User-defined functions
+
+Users can define their own function with the following syntax:
+
+```
+fn identifier(param1, param2, param3) {
+    // function body here
+}
+```
+
+Much like JavaScript, except the `function` keyword has been replaced with `fn`, to keep the language
+in line with Rust-like syntax.
+
+Functions can add scene objects to the scene, return values with the `return` keyword, and do a host
+of other operations that can be done in the global scope (or in statement scopes).
+
+#### Statements/loops
+
+An if-statement is constructed with the following syntax:
+
+```
+if condition {
+    // body
+} else if other_condition {
+    // else-if body
+} else {
+    // else body
+}
+```
+
+A for loop over a definite integer range, upper-bound exclusive can be constructed with the following syntax:
+
+```
+for i in lower to upper {
+    // body, use `i` here
+}
+```
+
+#### Comparison and logic
+
+The SDL supports normal comparison and logic operators, like `==`, `!=`, `>`, `>=`, `<`, `<=`, `&&`, and `||`.
+
+A value is truthy if it
+
+* is a number and is non-zero
+* is a boolean and is true
+* is not the unit type
+* all other cases
 
 ### Objects
 
