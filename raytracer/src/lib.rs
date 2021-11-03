@@ -10,6 +10,3 @@ pub mod math;
 pub mod object;
 pub mod scene;
 pub mod skybox;
-
-#[cfg(feature = "lua")]
-pub mod lua;

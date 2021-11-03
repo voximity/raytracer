@@ -308,9 +308,14 @@ impl AstParser {
                                                 let _ = else_body.insert(body);
                                                 break;
                                             }
-                                            t => return Err(AstError::UnexpectedToken("`if` or opening brace".into(), t)),
+                                            t => {
+                                                return Err(AstError::UnexpectedToken(
+                                                    "`if` or opening brace".into(),
+                                                    t,
+                                                ))
+                                            }
                                         }
-                                    },
+                                    }
                                     _ => break,
                                 }
                             }

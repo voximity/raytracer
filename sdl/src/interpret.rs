@@ -487,7 +487,10 @@ impl Interpreter {
                         self.scope_stack.pop();
                     }
                 }
-                ast::Node::If { cond_bodies, else_body } => {
+                ast::Node::If {
+                    cond_bodies,
+                    else_body,
+                } => {
                     let mut run_body = None;
                     for (cond, body) in cond_bodies.into_iter() {
                         if Value::from_node(self, scene, *cond)?.is_truthy() {
