@@ -30,6 +30,7 @@ pub enum Op {
     // Miscellaneous
     Assign,
     RangeExclusive,
+    ArrayPush,
 
     // Comparison
     Eq,
@@ -100,6 +101,7 @@ impl Display for Token {
 
             Self::Op(Op::Assign) => write!(f, "="),
             Self::Op(Op::RangeExclusive) => write!(f, ".."),
+            Self::Op(Op::ArrayPush) => write!(f, "<<"),
 
             Self::Op(Op::Lt) => write!(f, "<"),
             Self::Op(Op::Gt) => write!(f, ">"),
@@ -211,6 +213,10 @@ impl<R: Read + Seek> Tokenizer<R> {
                     match self.peek_next() {
                         Ok('=') => {
                             tokens.push(Token::Op(Op::LtEq));
+                            self.skip()?;
+                        }
+                        Ok('<') => {
+                            tokens.push(Token::Op(Op::ArrayPush));
                             self.skip()?;
                         }
                         _ => tokens.push(Token::Op(Op::Lt)),

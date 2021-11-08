@@ -119,6 +119,9 @@ pub enum Value {
 
     /// A dictionary.
     Dictionary(HashMap<String, Value>),
+
+    /// An array.
+    Array(Vec<Value>),
 }
 
 impl From<Value> for ast::Node {
@@ -137,6 +140,7 @@ impl From<Value> for ast::Node {
             Value::Dictionary(m) => {
                 Self::Dictionary(m.into_iter().map(|(k, v)| (k, v.into())).collect())
             }
+            Value::Array(a) => Self::Array(a.into_iter().map(Value::into).collect()),
         }
     }
 }
@@ -180,6 +184,11 @@ impl Value {
                     .filter_map(|(k, v)| {
                         Value::from_node(interpreter, scene, v).ok().map(|v| (k, v))
                     })
+                    .collect(),
+            ),
+            ast::Node::Array(a) => Self::Array(
+                a.into_iter()
+                    .filter_map(|v| Value::from_node(interpreter, scene, v).ok())
                     .collect(),
             ),
             // arithmetic operators
@@ -310,12 +319,14 @@ impl Value {
 impl PartialEq<ast::NodeKind> for Value {
     fn eq(&self, other: &ast::NodeKind) -> bool {
         match (self, other) {
+            (_, ast::NodeKind::Any) => true,
             (Self::Dictionary(_), ast::NodeKind::Dictionary) => true,
             (Self::String(_), ast::NodeKind::String) => true,
             (Self::Number(_), ast::NodeKind::Number) => true,
             (Self::Vector(_), ast::NodeKind::Vector) => true,
             (Self::Color(_), ast::NodeKind::Color) => true,
             (Self::Boolean(_), ast::NodeKind::Boolean) => true,
+            (Self::Array(_), ast::NodeKind::Array) => true,
             _ => false,
         }
     }
@@ -516,6 +527,15 @@ impl Interpreter {
                 }
                 ast::Node::Call(name, args) => {
                     self.call_func(scene, name, args)?;
+                }
+                ast::Node::ArrayPush(name, value) => {
+                    let value = Value::from_node(self, scene, *value)?;
+                    match self.variable_value_mut(&name) {
+                        Some(Value::Array(a)) => {
+                            a.push(value);
+                        }
+                        _ => return Err(InterpretError::InvalidCallArgs),
+                    }
                 }
                 ast::Node::Object {
                     name,
@@ -1002,6 +1022,10 @@ impl Interpreter {
                     println!("{}", unwrap_variant!(&v[0], Value::Boolean));
                     Ok(Value::Unit)
                 }),
+                Function::new(&["print"], &[NodeKind::Array], |v| {
+                    println!("{:?}", unwrap_variant!(&v[0], Value::Array));
+                    Ok(Value::Unit)
+                }),
 
                 // constructors
                 Function::new(&["color", "rgb"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |v| {
@@ -1143,6 +1167,7 @@ impl Interpreter {
         macro_rules! match_kinds {
             ($nk:ident, $v:ident, $o:ident, $($t:ident),+,) => {
                 match $nk {
+                    ast::NodeKind::Any => $o.push($v),
                     $(
                         ast::NodeKind::$t => {
                             if matches!($v, Value::$t(_)) {
@@ -1157,7 +1182,7 @@ impl Interpreter {
         // now iterate through each dest arg and compare with the arg we have
         for (node_kind, value) in dest.into_iter().zip(args.into_iter()) {
             match_kinds!(
-                node_kind, value, out, Boolean, Color, Dictionary, Number, String, Vector,
+                node_kind, value, out, Boolean, Color, Dictionary, Number, String, Vector, Array,
             );
         }
 
@@ -1177,6 +1202,7 @@ impl Interpreter {
         macro_rules! match_kinds {
             ($nk:ident, $v:ident, $($t:ident),+,) => {
                 match $nk {
+                    ast::NodeKind::Any => Ok(Some($v)),
                     $(
                         ast::NodeKind::$t => {
                             if matches!($v, Value::$t(_)) {
@@ -1193,7 +1219,9 @@ impl Interpreter {
         match properties.remove(name) {
             Some(node) => {
                 let value = Value::from_node(self, scene, node)?;
-                match_kinds!(kind, value, Boolean, Color, Dictionary, Number, String, Vector,)
+                match_kinds!(
+                    kind, value, Boolean, Color, Dictionary, Number, String, Vector, Array,
+                )
             }
             None => Ok(None),
         }
@@ -1205,6 +1233,16 @@ impl Interpreter {
         for scope in self.scope_stack.iter().rev() {
             if let Some(value) = scope.vars.get(identifier) {
                 return Some(value.to_owned());
+            }
+        }
+
+        None
+    }
+
+    fn variable_value_mut(&mut self, identifier: &String) -> Option<&mut Value> {
+        for scope in self.scope_stack.iter_mut().rev() {
+            if let Some(value) = scope.vars.get_mut(identifier) {
+                return Some(value);
             }
         }
 

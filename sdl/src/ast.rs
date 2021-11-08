@@ -128,11 +128,18 @@ pub enum Node {
     /// A boolean.
     Boolean(bool),
 
+    /// An array of nodes.
+    Array(Vec<Node>),
+
     /// The unit type, ().
     Unit,
 
     /// A scope terminator.
     ScopeTerminator,
+
+    // Array actions
+    /// An array push, taking in the identifier name of the array, and the node that will be inserted.
+    ArrayPush(String, Box<Node>),
 
     // Arithmetic
     /// The addition of two nodes.
@@ -182,12 +189,14 @@ pub enum Node {
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum NodeKind {
+    Any,
     Dictionary,
     String,
     Number,
     Vector,
     Color,
     Boolean,
+    Array,
 }
 
 /// An AST parser, which takes in a list of tokens from the tokenizer and parses out to
@@ -405,6 +414,13 @@ impl AstParser {
                                 value: Box::new(self.parse_value(true)?),
                             })
                         }
+                        Some(Token::Op(Op::ArrayPush)) => {
+                            self.tokens.next();
+                            nodes.push(Node::ArrayPush(
+                                identifier,
+                                Box::new(self.parse_value(true)?),
+                            ));
+                        }
                         Some(Token::Sep(Sep::BraceOpen)) => {
                             nodes.push(self.read_object(identifier)?)
                         }
@@ -577,6 +593,52 @@ impl AstParser {
                     self.next()?;
 
                     out_queue.push(self.read_dict()?);
+                }
+                Token::Sep(Sep::BracketOpen) => {
+                    if !last_op {
+                        break;
+                    } else {
+                        last_op = false;
+                    }
+
+                    self.next()?;
+
+                    // get all the items in the array
+                    let mut v = Vec::new();
+                    loop {
+                        // if we hit the close token, stop the loop early
+                        if let Some(t) = self.tokens.peek() {
+                            if t == &Token::Sep(Sep::BracketClose) {
+                                self.next()?;
+                                break;
+                            }
+                        }
+
+                        // continuously scan for more items
+                        let (next_item, ct) = match self.parse_value(true) {
+                            Ok(v) => (v, true),
+                            Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => (v, false),
+                            Err(e) => return Err(e),
+                        };
+                        v.push(next_item);
+
+                        if !ct {
+                            break;
+                        }
+
+                        // if we hit the close token, stop the loop, just like before
+                        if let Some(t) = self.tokens.peek() {
+                            if t == &Token::Sep(Sep::BracketClose) {
+                                self.next()?;
+                                break;
+                            }
+                        }
+
+                        // if the next token wasn't the close token, expect the delimiter
+                        self.read_sep(Sep::Comma)?;
+                    }
+
+                    out_queue.push(Node::Array(v));
                 }
                 Token::Op(Op::Lt) if last_op => {
                     last_op = false;
