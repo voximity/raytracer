@@ -6,6 +6,7 @@ use std::{
 
 use image::{ImageBuffer, Rgb};
 use lazy_static::lazy_static;
+use noise::{NoiseFn, Perlin};
 use rand::Rng;
 use raytracer::{
     lighting::{self, AreaSurface},
@@ -93,6 +94,15 @@ pub enum InterpretError {
 
     #[error("attempt to perform logic on non-boolean types")]
     BadLogic,
+
+    #[error("attempt to index a variable that is not an array")]
+    NonArrayVariable,
+
+    #[error("attempt to index an array with a non-number value")]
+    NonNumberIndex,
+
+    #[error("index out of bounds")]
+    IndexOutOfBounds,
 }
 
 /// A definite value, which has been reduced from
@@ -191,6 +201,20 @@ impl Value {
                     .filter_map(|v| Value::from_node(interpreter, scene, v).ok())
                     .collect(),
             ),
+            ast::Node::ArrayAccess(ident, index) => {
+                let index = Self::from_node(interpreter, scene, *index)?;
+                let array = interpreter.variable_value(&ident);
+                match array.ok_or(InterpretError::UndefinedVariable(ident))? {
+                    Value::Array(a) => match a.get(match index {
+                        Value::Number(i) => i as usize,
+                        _ => return Err(InterpretError::NonNumberIndex),
+                    }) {
+                        Some(val) => val.to_owned(),
+                        None => return Err(InterpretError::IndexOutOfBounds),
+                    },
+                    _ => return Err(InterpretError::NonArrayVariable),
+                }
+            }
             // arithmetic operators
             ast::Node::Add(a, b) => Self::from_node(
                 interpreter,
@@ -358,6 +382,7 @@ pub struct Interpreter {
     images: ImageCache,
     scope_stack: Vec<Scope>,
     object_names: Vec<String>,
+    perlin: Perlin,
 }
 
 impl Interpreter {
@@ -385,6 +410,7 @@ impl Interpreter {
             images: HashMap::new(),
             scope_stack: stack,
             object_names: Vec::new(),
+            perlin: Perlin::new(),
         })
     }
 
@@ -640,14 +666,13 @@ impl Interpreter {
                             let pos =
                                 required_property!(self, scene, properties, "position", Vector);
                             let size = required_property!(self, scene, properties, "size", Vector);
-                            let material = self.read_material(scene, properties)?;
+                            let material = self.read_material(scene, &mut properties)?;
 
                             scene
                                 .objects
                                 .push(Box::new(object::Aabb::new(pos, size, material)));
                         }
                         "mesh" => {
-                            let obj = required_property!(self, scene, properties, "obj", String);
                             let position =
                                 optional_property!(self, scene, properties, "position", Vector)
                                     .unwrap_or_else(|| Vector3::default());
@@ -658,9 +683,38 @@ impl Interpreter {
                                 optional_property!(self, scene, properties, "rotate_xyz", Vector);
                             let rotate_zyx =
                                 optional_property!(self, scene, properties, "rotate_zyx", Vector);
-                            let material = self.read_material(scene, properties)?;
+                            let material = self.read_material(scene, &mut properties)?;
 
-                            let mut mesh = object::Mesh::from_obj(obj, material);
+                            let mut mesh = if properties.contains_key("obj") {
+                                let obj =
+                                    required_property!(self, scene, properties, "obj", String);
+                                object::Mesh::from_obj(obj, material)
+                            } else {
+                                let mut verts =
+                                    required_property!(self, scene, properties, "verts", Array)
+                                        .into_iter()
+                                        .filter_map(|v| match v {
+                                            Value::Vector(v) => Some(v),
+                                            _ => None,
+                                        });
+                                let mut tris = vec![];
+                                loop {
+                                    let v0 = match verts.next() {
+                                        Some(v) => v,
+                                        None => break,
+                                    };
+                                    let v1 = match verts.next() {
+                                        Some(v) => v,
+                                        None => break,
+                                    };
+                                    let v2 = match verts.next() {
+                                        Some(v) => v,
+                                        None => break,
+                                    };
+                                    tris.push(object::Triangle::new((v0, v1, v2), None, None));
+                                }
+                                object::Mesh::new(tris, material)
+                            };
 
                             if scale != 1. {
                                 mesh.scale(scale);
@@ -700,7 +754,7 @@ impl Interpreter {
                                 optional_property!(self, scene, properties, "uv_wrap", Number)
                                     .map(|f| f as f32)
                                     .unwrap_or(1.);
-                            let material = self.read_material(scene, properties)?;
+                            let material = self.read_material(scene, &mut properties)?;
 
                             scene.objects.push(Box::new(object::Plane {
                                 origin,
@@ -714,7 +768,7 @@ impl Interpreter {
                                 required_property!(self, scene, properties, "position", Vector);
                             let radius =
                                 required_property!(self, scene, properties, "radius", Number);
-                            let material = self.read_material(scene, properties)?;
+                            let material = self.read_material(scene, &mut properties)?;
 
                             scene
                                 .objects
@@ -882,7 +936,7 @@ impl Interpreter {
     fn read_material(
         &mut self,
         scene: &mut Scene,
-        mut properties: HashMap<String, ast::Node>,
+        properties: &mut HashMap<String, ast::Node>,
     ) -> Result<Material, InterpretError> {
         match properties.remove("material") {
             Some(ast::Node::Dictionary(mut map)) => {
@@ -969,16 +1023,16 @@ impl Interpreter {
     ) -> Result<Value, InterpretError> {
         macro_rules! float_func {
             ($n:ident) => {
-                |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number).$n()))
+                |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number).$n()))
             };
         }
 
         macro_rules! vector_func {
             ($n:ident, $r:ident) => {
-                |v| Ok(Value::$r(unwrap_variant!(v[0], Value::Vector).$n()))
+                |_, v| Ok(Value::$r(unwrap_variant!(v[0], Value::Vector).$n()))
             };
             ($n:ident, $r:ident,) => {
-                |v| {
+                |_, v| {
                     Ok(Value::$r(
                         unwrap_variant!(v[0], Value::Vector)
                             .$n(unwrap_variant!(v[1], Value::Vector)),
@@ -990,52 +1044,52 @@ impl Interpreter {
         lazy_static! {
             static ref FUNCTIONS: Vec<Function> = vec![
                 // floating point operators
-                Function::new(&["add"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) + unwrap_variant!(v[1], Value::Number)))),
-                Function::new(&["sub"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) - unwrap_variant!(v[1], Value::Number)))),
-                Function::new(&["mul"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) * unwrap_variant!(v[1], Value::Number)))),
-                Function::new(&["div"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) / unwrap_variant!(v[1], Value::Number)))),
-                Function::new(&["mod"], &[NodeKind::Number, NodeKind::Number], |v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) % unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["add"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) + unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["sub"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) - unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["mul"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) * unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["div"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) / unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["mod"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) % unwrap_variant!(v[1], Value::Number)))),
 
                 // vector operators
-                Function::new(&["add"], &[NodeKind::Vector, NodeKind::Vector], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) + unwrap_variant!(v[1], Value::Vector)))),
-                Function::new(&["sub"], &[NodeKind::Vector, NodeKind::Vector], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) - unwrap_variant!(v[1], Value::Vector)))),
-                Function::new(&["mul"], &[NodeKind::Vector, NodeKind::Vector], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) * unwrap_variant!(v[1], Value::Vector)))),
-                Function::new(&["div"], &[NodeKind::Vector, NodeKind::Vector], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) / unwrap_variant!(v[1], Value::Vector)))),
+                Function::new(&["add"], &[NodeKind::Vector, NodeKind::Vector], |_, v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) + unwrap_variant!(v[1], Value::Vector)))),
+                Function::new(&["sub"], &[NodeKind::Vector, NodeKind::Vector], |_, v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) - unwrap_variant!(v[1], Value::Vector)))),
+                Function::new(&["mul"], &[NodeKind::Vector, NodeKind::Vector], |_, v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) * unwrap_variant!(v[1], Value::Vector)))),
+                Function::new(&["div"], &[NodeKind::Vector, NodeKind::Vector], |_, v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) / unwrap_variant!(v[1], Value::Vector)))),
 
                 // vector (*|/) floating point
-                Function::new(&["mul"], &[NodeKind::Vector, NodeKind::Number], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) * unwrap_variant!(v[1], Value::Number)))),
-                Function::new(&["div"], &[NodeKind::Vector, NodeKind::Number], |v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) / unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["mul"], &[NodeKind::Vector, NodeKind::Number], |_, v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) * unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["div"], &[NodeKind::Vector, NodeKind::Number], |_, v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) / unwrap_variant!(v[1], Value::Number)))),
 
                 // string operators
-                Function::new(&["add"], &[NodeKind::String, NodeKind::String], |v| Ok(Value::String(format!("{}{}", unwrap_variant!(&v[0], Value::String), unwrap_variant!(&v[1], Value::String))))),
+                Function::new(&["add"], &[NodeKind::String, NodeKind::String], |_, v| Ok(Value::String(format!("{}{}", unwrap_variant!(&v[0], Value::String), unwrap_variant!(&v[1], Value::String))))),
 
                 // printing
-                Function::new(&["print"], &[NodeKind::String], |v| {
+                Function::new(&["print"], &[NodeKind::String], |_, v| {
                     println!("{}", unwrap_variant!(&v[0], Value::String));
                     Ok(Value::Unit)
                 }),
-                Function::new(&["print"], &[NodeKind::Number], |v| {
+                Function::new(&["print"], &[NodeKind::Number], |_, v| {
                     println!("{}", unwrap_variant!(&v[0], Value::Number));
                     Ok(Value::Unit)
                 }),
-                Function::new(&["print"], &[NodeKind::Boolean], |v| {
+                Function::new(&["print"], &[NodeKind::Boolean], |_, v| {
                     println!("{}", unwrap_variant!(&v[0], Value::Boolean));
                     Ok(Value::Unit)
                 }),
-                Function::new(&["print"], &[NodeKind::Array], |v| {
+                Function::new(&["print"], &[NodeKind::Array], |_, v| {
                     println!("{:?}", unwrap_variant!(&v[0], Value::Array));
                     Ok(Value::Unit)
                 }),
 
                 // constructors
-                Function::new(&["color", "rgb"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |v| {
+                Function::new(&["color", "rgb"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |_, v| {
                     Ok(Value::Color(Color::new(
                         unwrap_variant!(v[0], Value::Number) as u8,
                         unwrap_variant!(v[1], Value::Number) as u8,
                         unwrap_variant!(v[2], Value::Number) as u8,
                     )))
                 }),
-                Function::new(&["hsv"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |v| {
+                Function::new(&["hsv"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |_, v| {
                     let (h, s, v) = (
                         unwrap_variant!(v[0], Value::Number) % 360.,
                         unwrap_variant!(v[1], Value::Number),
@@ -1081,13 +1135,13 @@ impl Interpreter {
                 Function::new(&["ceil"], &[NodeKind::Number], float_func!(ceil)),
                 Function::new(&["rad"], &[NodeKind::Number], float_func!(to_radians)),
                 Function::new(&["deg"], &[NodeKind::Number], float_func!(to_degrees)),
-                Function::new(&["random"], &[NodeKind::Number, NodeKind::Number], |v| {
+                Function::new(&["random"], &[NodeKind::Number, NodeKind::Number], |_, v| {
                     Ok(Value::Number(rand::thread_rng().gen_range(
                         unwrap_variant!(v[0], Value::Number)
                             ..=unwrap_variant!(v[1], Value::Number),
                     )))
                 }),
-                Function::new(&["lerp"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |v| {
+                Function::new(&["lerp"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |_, v| {
                     Ok(Value::Number(Lerp::lerp(
                         unwrap_variant!(v[0], Value::Number),
                         unwrap_variant!(v[1], Value::Number),
@@ -1099,13 +1153,25 @@ impl Interpreter {
                 Function::new(&["normalize"], &[NodeKind::Vector], vector_func!(normalize, Vector)),
                 Function::new(&["magnitude"], &[NodeKind::Vector], vector_func!(magnitude, Number)),
                 Function::new(&["angle"], &[NodeKind::Vector], vector_func!(angle, Number,)),
-                Function::new(&["lerp"], &[NodeKind::Vector, NodeKind::Vector, NodeKind::Number], |v| {
+                Function::new(&["lerp"], &[NodeKind::Vector, NodeKind::Vector, NodeKind::Number], |_, v| {
                     Ok(Value::Vector(
                         unwrap_variant!(v[0], Value::Vector).lerp(
                             unwrap_variant!(v[1], Value::Vector),
                             unwrap_variant!(v[2], Value::Number),
                         ))
                     )
+                }),
+
+                // noise gen functions
+                Function::new(&["perlin"], &[NodeKind::Number, NodeKind::Number], |s, v| {
+                    Ok(Value::Number(s.perlin.get(
+                        [unwrap_variant!(v[0], Value::Number), unwrap_variant!(v[1], Value::Number)]
+                    )))
+                }),
+                Function::new(&["perlin"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |s, v| {
+                    Ok(Value::Number(s.perlin.get(
+                        [unwrap_variant!(v[0], Value::Number), unwrap_variant!(v[1], Value::Number), unwrap_variant!(v[2], Value::Number)]
+                    )))
                 }),
             ];
         }
@@ -1116,7 +1182,7 @@ impl Interpreter {
             .iter()
             .filter(|f| f.names.contains(&name.as_str()))
         {
-            if let Some(r) = func.try_eval(values.clone()) {
+            if let Some(r) = func.try_eval(self, values.clone()) {
                 return r;
             }
         }

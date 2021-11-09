@@ -141,6 +141,9 @@ pub enum Node {
     /// An array push, taking in the identifier name of the array, and the node that will be inserted.
     ArrayPush(String, Box<Node>),
 
+    /// An array access.
+    ArrayAccess(String, Box<Node>),
+
     // Arithmetic
     /// The addition of two nodes.
     Add(Box<Node>, Box<Node>),
@@ -658,49 +661,56 @@ impl AstParser {
                         _ => unreachable!(),
                     };
 
-                    if let Some(Token::Sep(Sep::ParensOpen)) = self.tokens.peek() {
-                        self.next()?;
+                    match self.tokens.peek() {
+                        Some(Token::Sep(Sep::ParensOpen)) => {
+                            self.next()?;
 
-                        let mut v = Vec::new();
+                            let mut v = Vec::new();
 
-                        loop {
-                            // if we hit the close token, stop the loop early
-                            if let Some(t) = self.tokens.peek() {
-                                if t == &Token::Sep(Sep::ParensClose) {
-                                    self.next()?;
+                            loop {
+                                // if we hit the close token, stop the loop early
+                                if let Some(t) = self.tokens.peek() {
+                                    if t == &Token::Sep(Sep::ParensClose) {
+                                        self.next()?;
+                                        break;
+                                    }
+                                }
+
+                                // continuously scan for more items
+                                let (next_item, ct) = match self.parse_value(true) {
+                                    Ok(v) => (v, true),
+                                    Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => {
+                                        (v, false)
+                                    }
+                                    Err(e) => return Err(e),
+                                };
+                                v.push(next_item);
+
+                                if !ct {
                                     break;
                                 }
-                            }
 
-                            // continuously scan for more items
-                            let (next_item, ct) = match self.parse_value(true) {
-                                Ok(v) => (v, true),
-                                Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => {
-                                    (v, false)
+                                // if we hit the close token, stop the loop, just like before
+                                if let Some(t) = self.tokens.peek() {
+                                    if t == &Token::Sep(Sep::ParensClose) {
+                                        self.next()?;
+                                        break;
+                                    }
                                 }
-                                Err(e) => return Err(e),
-                            };
-                            v.push(next_item);
 
-                            if !ct {
-                                break;
+                                // if the next token wasn't the close token, expect the delimiter
+                                self.read_sep(Sep::Comma)?;
                             }
 
-                            // if we hit the close token, stop the loop, just like before
-                            if let Some(t) = self.tokens.peek() {
-                                if t == &Token::Sep(Sep::ParensClose) {
-                                    self.next()?;
-                                    break;
-                                }
-                            }
-
-                            // if the next token wasn't the close token, expect the delimiter
-                            self.read_sep(Sep::Comma)?;
+                            out_queue.push(Node::Call(ident, v));
                         }
-
-                        out_queue.push(Node::Call(ident, v));
-                    } else {
-                        out_queue.push(Node::Identifier(ident));
+                        Some(Token::Sep(Sep::BracketOpen)) => {
+                            self.next()?;
+                            let index = self.parse_value(true)?;
+                            self.read_sep(Sep::BracketClose)?;
+                            out_queue.push(Node::ArrayAccess(ident, Box::new(index)));
+                        }
+                        _ => out_queue.push(Node::Identifier(ident)),
                     }
                 }
                 Token::Op(op) => {
