@@ -370,3 +370,51 @@ for n in 1 to 50 {
     }
 }
 ```
+
+#### 11/8/2021
+
+Today, I got a basic implementation of arrays working, as well as procedural mesh generation. Right now, things are very
+very slow, and internally arrays are not implemented very well. I would like to streamline this process and make the
+internals less fuzzy. Here's a sample image and the SDL code used to produce it.
+
+![Progress image from 11/8/2021](/images/readme/11_8_2021.png)
+
+```
+let w = 48
+let h = 48
+let terrain = []
+
+sun { vector: <-0.8, -1, -0.2> }
+
+camera {
+    origin: <0, 4, 0>,
+    pitch: -0.5
+}
+
+for z in 0 to h {
+    for x in 0 to w {
+        terrain << perlin(x * 0.15, z * 0.15) * 2
+    }
+}
+
+let verts = []
+for z in 0 to h - 1 {
+    for x in 0 to w - 1 {
+        verts << <x, terrain[x + z * w], z>
+        verts << <x, terrain[x + (z + 1) * w], z + 1>
+        verts << <x + 1, terrain[x + 1 + z * w], z>
+
+        verts << <x, terrain[x + (z + 1) * w], z + 1>
+        verts << <x + 1, terrain[x + 1 + (z + 1) * w], z + 1>
+        verts << <x + 1, terrain[x + 1 + z * w], z>
+    }
+}
+
+mesh {
+    verts,
+    position: <0, -3, -20>,
+    material: {
+        texture: solid(rgb(0, 180, 0))
+    }
+}
+```
