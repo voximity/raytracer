@@ -1,5 +1,15 @@
-let nums = [1, 2, 3, 4, 5]
+let a = []
 
-for i in 0 to length(nums) {
-    print(nums[i])
+for i in 0 to 4 {
+    push(a, [])
+    for j in 0 to 4 {
+        push(a[i], j)
+    }
+}
+
+for i in 0 to length(a) {
+    for j in 0 to length(a[i]) {
+        print(a[i][j])
+    }
+    print("")
 }

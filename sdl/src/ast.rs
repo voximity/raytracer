@@ -588,50 +588,61 @@ impl AstParser {
                     out_queue.push(self.read_dict()?);
                 }
                 Token::Sep(Sep::BracketOpen) => {
-                    if !last_op {
-                        break;
-                    } else {
-                        last_op = false;
-                    }
-
-                    self.next()?;
-
-                    // get all the items in the array
-                    let mut v = Vec::new();
-                    loop {
-                        // if we hit the close token, stop the loop early
-                        if let Some(t) = self.tokens.peek() {
-                            if t == &Token::Sep(Sep::BracketClose) {
-                                self.next()?;
-                                break;
-                            }
-                        }
-
-                        // continuously scan for more items
-                        let (next_item, ct) = match self.parse_value(true) {
-                            Ok(v) => (v, true),
-                            Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => (v, false),
-                            Err(e) => return Err(e),
-                        };
-                        v.push(next_item);
-
-                        if !ct {
+                    if out_queue.is_empty() {
+                        if !last_op {
                             break;
+                        } else {
+                            last_op = false;
                         }
-
-                        // if we hit the close token, stop the loop, just like before
-                        if let Some(t) = self.tokens.peek() {
-                            if t == &Token::Sep(Sep::BracketClose) {
-                                self.next()?;
+    
+                        self.next()?;
+    
+                        // get all the items in the array
+                        let mut v = Vec::new();
+                        loop {
+                            // if we hit the close token, stop the loop early
+                            if let Some(t) = self.tokens.peek() {
+                                if t == &Token::Sep(Sep::BracketClose) {
+                                    self.next()?;
+                                    break;
+                                }
+                            }
+    
+                            // continuously scan for more items
+                            let (next_item, ct) = match self.parse_value(true) {
+                                Ok(v) => (v, true),
+                                Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => (v, false),
+                                Err(e) => return Err(e),
+                            };
+                            v.push(next_item);
+    
+                            if !ct {
                                 break;
                             }
+    
+                            // if we hit the close token, stop the loop, just like before
+                            if let Some(t) = self.tokens.peek() {
+                                if t == &Token::Sep(Sep::BracketClose) {
+                                    self.next()?;
+                                    break;
+                                }
+                            }
+    
+                            // if the next token wasn't the close token, expect the delimiter
+                            self.read_sep(Sep::Comma)?;
                         }
-
-                        // if the next token wasn't the close token, expect the delimiter
-                        self.read_sep(Sep::Comma)?;
+    
+                        out_queue.push(Node::Array(v));
+                    } else {
+                        self.next()?;
+                        let index = self.parse_value(true)?;
+                        self.read_sep(Sep::BracketClose)?;
+                        let indexing = out_queue.pop().unwrap();
+                        out_queue.push(Node::ArrayAccess(
+                            Box::new(indexing),
+                            Box::new(index),
+                        ));
                     }
-
-                    out_queue.push(Node::Array(v));
                 }
                 Token::Op(Op::Lt) if last_op => {
                     last_op = false;
@@ -693,15 +704,6 @@ impl AstParser {
                             }
 
                             out_queue.push(Node::Call(ident, v));
-                        }
-                        Some(Token::Sep(Sep::BracketOpen)) => {
-                            self.next()?;
-                            let index = self.parse_value(true)?;
-                            self.read_sep(Sep::BracketClose)?;
-                            out_queue.push(Node::ArrayAccess(
-                                Box::new(Node::Identifier(ident)),
-                                Box::new(index),
-                            ));
                         }
                         _ => out_queue.push(Node::Identifier(ident)),
                     }
