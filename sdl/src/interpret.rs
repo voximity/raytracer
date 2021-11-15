@@ -1113,7 +1113,7 @@ impl Interpreter {
 
                     Ok(Value::Unit)
                 }),
-                Function::new(&["length"], &[NodeKind::Array], |s, v| {
+                Function::new(&["len"], &[NodeKind::Array], |s, v| {
                     let mut v = v.into_iter();
                     let key = match v.next().unwrap() {
                         Value::Ref(k, _) => *k,

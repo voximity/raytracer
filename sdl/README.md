@@ -46,6 +46,10 @@ As far as values go, there are a few primitive types:
 * Colors, which are constructed with the familiar function call syntax `color(r, g, b)`, where r, g, and b are numbers from 0-255
 * Dictionaries, which are constructed much like JSON objects. They are wrapped in curly braces and are a collection of comma-separated key-values, like `{key: value, another_key: another_value}`
 
+There are also reference objects, which include:
+
+* Arrays, which are constructed with `[1, 2, 3]` syntax. Nested arrays are supported, e.g. `[[1, 2, 3], [4, 5, 6]]`. They can be index using `array[index]` syntax.
+
 ## Variables
 
 In any scope, variables can be set simply with the syntax `identifer = value`, like `tau = PI * 2`.
@@ -99,6 +103,11 @@ There are a number of functions that can be used as values.
 * `normalize(v)` returns a normalized v
 * `magnitude(v)` returns the magnitude of v
 * `angle(a, b)` returns the angle between vectors a and b
+
+#### Array functions
+
+* `push(a, v)` pushes `v` into `a`
+* `len(a)` returns the length of `a`
 
 #### User-defined functions
 
@@ -228,7 +237,8 @@ for, say, `camera`. Read on to see what properties are valid for what objects.
   * `size`\* (vector), the distance from one corner to the center of the AABB (radial size if you will)
   * `material` (dictionary), see below
 * `mesh` (a scene object)
-  * `mesh`\* (string), the filename of the OBJ to load from
+  * `mesh`\* (string), the filename of the OBJ to load from, or alternatively:
+  * `verts`\* (array of vectors), the vertex buffer to use for the mesh (length should be divisible by 3, every 3 verts = a triangle)
   * `position` (vector), the center of the mesh
   * `scale` (number), the scale factor
   * `rotate_xyz` (vector), a rotation vector for each axis (all in radians), applied in XYZ order

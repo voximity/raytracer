@@ -418,3 +418,27 @@ mesh {
     }
 }
 ```
+
+#### 11/14/2021
+
+Today, I reworked arrays internally and now reference objects are much more satisfyingly implemented. They are cleaned up when
+they go out of scope, and the awkward `<<` syntax has been replaced with `push(array, value)`. Here's an example of
+nested arrays in action:
+
+```
+let a = []
+
+for i in 0 to 4 {
+    push(a, [])
+    for j in 0 to 4 {
+        push(a[i], j)
+    }
+}
+
+for i in 0 to len(a) {
+    for j in 0 to len(a[i]) {
+        print(a[i][j])
+    }
+    print("")
+}
+```
