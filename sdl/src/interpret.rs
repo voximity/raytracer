@@ -2,6 +2,7 @@ use std::{
     cmp::Ordering,
     collections::{hash_map::Entry, HashMap},
     io::{Read, Seek},
+    rc::Rc,
 };
 
 use image::{ImageBuffer, Rgb};
@@ -16,11 +17,13 @@ use raytracer::{
     scene::Scene,
     skybox,
 };
+use slotmap::SlotMap;
 use thiserror::Error;
 
 use crate::{
     ast::{self, AstError, AstParser, NodeKind},
     function::Function,
+    reference::RefObject,
     tokenize::{TokenizeError, Tokenizer},
 };
 
@@ -103,6 +106,9 @@ pub enum InterpretError {
 
     #[error("index out of bounds")]
     IndexOutOfBounds,
+
+    #[error("invalid reference")]
+    InvalidReference,
 }
 
 /// A definite value, which has been reduced from
@@ -132,6 +138,9 @@ pub enum Value {
 
     /// An array.
     Array(Vec<Value>),
+
+    /// A reference to a reference object.
+    Ref(Rc<slotmap::DefaultKey>, NodeKind),
 }
 
 impl From<Value> for ast::Node {
@@ -150,7 +159,8 @@ impl From<Value> for ast::Node {
             Value::Dictionary(m) => {
                 Self::Dictionary(m.into_iter().map(|(k, v)| (k, v.into())).collect())
             }
-            Value::Array(a) => Self::Array(a.into_iter().map(Value::into).collect()),
+            Value::Array(a) => Self::Array(a.into_iter().map(Into::<ast::Node>::into).collect()),
+            Value::Ref(_, _) => unimplemented!(), // TODO
         }
     }
 }
@@ -196,22 +206,35 @@ impl Value {
                     })
                     .collect(),
             ),
-            ast::Node::Array(a) => Self::Array(
-                a.into_iter()
-                    .filter_map(|v| Value::from_node(interpreter, scene, v).ok())
-                    .collect(),
-            ),
+            ast::Node::Array(a) => {
+                let ref_obj = RefObject::Array(
+                    a.into_iter()
+                        .filter_map(|v| Value::from_node(interpreter, scene, v).ok())
+                        .collect(),
+                );
+                Self::Ref(interpreter.new_ref_obj(ref_obj), NodeKind::Array)
+            }
             ast::Node::ArrayAccess(ident, index) => {
                 let index = Self::from_node(interpreter, scene, *index)?;
-                let array = interpreter.variable_value(&ident);
-                match array.ok_or(InterpretError::UndefinedVariable(ident))? {
-                    Value::Array(a) => match a.get(match index {
-                        Value::Number(i) => i as usize,
-                        _ => return Err(InterpretError::NonNumberIndex),
-                    }) {
-                        Some(val) => val.to_owned(),
-                        None => return Err(InterpretError::IndexOutOfBounds),
-                    },
+                let array = Self::from_node(interpreter, scene, *ident)?;
+                match array {
+                    Value::Ref(key, NodeKind::Array) => {
+                        // get the reference object from the interpreter's RO storage
+                        let ro = interpreter
+                            .ref_objects
+                            .get(*key)
+                            .ok_or(InterpretError::InvalidReference)?;
+
+                        match ro {
+                            RefObject::Array(a) => match a.get(match index {
+                                Value::Number(i) => i as usize,
+                                _ => return Err(InterpretError::NonNumberIndex),
+                            }) {
+                                Some(val) => val.to_owned(),
+                                None => return Err(InterpretError::IndexOutOfBounds),
+                            },
+                        }
+                    }
                     _ => return Err(InterpretError::NonArrayVariable),
                 }
             }
@@ -350,7 +373,7 @@ impl PartialEq<ast::NodeKind> for Value {
             (Self::Vector(_), ast::NodeKind::Vector) => true,
             (Self::Color(_), ast::NodeKind::Color) => true,
             (Self::Boolean(_), ast::NodeKind::Boolean) => true,
-            (Self::Array(_), ast::NodeKind::Array) => true,
+            (Self::Ref(_, kind), k) if kind == k => true,
             _ => false,
         }
     }
@@ -382,6 +405,8 @@ pub struct Interpreter {
     images: ImageCache,
     scope_stack: Vec<Scope>,
     object_names: Vec<String>,
+    ref_objects: SlotMap<slotmap::DefaultKey, RefObject>,
+    refs: Vec<Rc<slotmap::DefaultKey>>,
     perlin: Perlin,
 }
 
@@ -410,6 +435,8 @@ impl Interpreter {
             images: HashMap::new(),
             scope_stack: stack,
             object_names: Vec::new(),
+            ref_objects: SlotMap::new(),
+            refs: Vec::new(),
             perlin: Perlin::new(),
         })
     }
@@ -521,7 +548,7 @@ impl Interpreter {
                         self.run_scope(scene, body.clone())?;
 
                         // pop the scope from the stack
-                        self.scope_stack.pop();
+                        self.pop_scope();
                     }
                 }
                 ast::Node::If {
@@ -538,7 +565,7 @@ impl Interpreter {
                     if let Some(body) = run_body.or(else_body) {
                         self.scope_stack.push(Scope::default());
                         self.run_scope(scene, body)?;
-                        self.scope_stack.pop();
+                        self.pop_scope();
                     }
                 }
                 ast::Node::Function { name, params, body } => {
@@ -554,15 +581,25 @@ impl Interpreter {
                 ast::Node::Call(name, args) => {
                     self.call_func(scene, name, args)?;
                 }
-                ast::Node::ArrayPush(name, value) => {
-                    let value = Value::from_node(self, scene, *value)?;
-                    match self.variable_value_mut(&name) {
-                        Some(Value::Array(a)) => {
-                            a.push(value);
-                        }
-                        _ => return Err(InterpretError::InvalidCallArgs),
-                    }
-                }
+                // ast::Node::ArrayPush(array, value) => {
+                //     let array = Value::from_node(self, scene, *array)?;
+                //     let value = Value::from_node(self, scene, *value)?;
+
+                //     match array {
+                //         Value::Ref(rc, NodeKind::Array) => {
+                //             let ro = self
+                //                 .ref_objects
+                //                 .get_mut(*rc)
+                //                 .ok_or(InterpretError::InvalidReference)?;
+
+                //             match ro {
+                //                 RefObject::Array(a) => a.push(value),
+                //                 _ => return Err(InterpretError::NonArrayVariable),
+                //             }
+                //         }
+                //         _ => return Err(InterpretError::InvalidCallArgs),
+                //     }
+                // }
                 ast::Node::Object {
                     name,
                     mut properties,
@@ -1063,6 +1100,22 @@ impl Interpreter {
                 // string operators
                 Function::new(&["add"], &[NodeKind::String, NodeKind::String], |_, v| Ok(Value::String(format!("{}{}", unwrap_variant!(&v[0], Value::String), unwrap_variant!(&v[1], Value::String))))),
 
+                // array operations
+                Function::new(&["push"], &[NodeKind::Array, NodeKind::Any], |s, v| {
+                    let mut v = v.into_iter();
+                    let key = match v.next().unwrap() {
+                        Value::Ref(k, _) => *k,
+                        _ => unreachable!(),
+                    };
+
+                    match s.ref_objects.get_mut(key) {
+                        Some(RefObject::Array(a)) => a.push(v.next().unwrap()),
+                        _ => return Err(InterpretError::InvalidReference),
+                    }
+
+                    Ok(Value::Unit)
+                }),
+
                 // printing
                 Function::new(&["print"], &[NodeKind::String], |_, v| {
                     println!("{}", unwrap_variant!(&v[0], Value::String));
@@ -1209,7 +1262,7 @@ impl Interpreter {
 
             self.scope_stack.push(new_scope);
             let ret = self.run_scope(scene, func.body.clone())?;
-            self.scope_stack.pop();
+            self.pop_scope();
 
             return Ok(ret);
         }
@@ -1271,10 +1324,22 @@ impl Interpreter {
                     ast::NodeKind::Any => Ok(Some($v)),
                     $(
                         ast::NodeKind::$t => {
-                            if matches!($v, Value::$t(_)) {
-                                Ok(Some($v))
-                            } else {
-                                Err(InterpretError::InvalidCallArgs)
+                            match $v {
+                                Value::Ref(rc, _) => {
+                                    match self.ref_objects.get(*rc) {
+                                        Some(ro) => {
+                                            let val = ro.clone().into();
+                                            if matches!(val, Value::$t(_)) {
+                                                Ok(Some(val))
+                                            } else {
+                                                Err(InterpretError::InvalidCallArgs)
+                                            }
+                                        }
+                                        None => Err(InterpretError::InvalidCallArgs),
+                                    }
+                                }
+                                Value::$t(_) => Ok(Some($v)),
+                                _ => Err(InterpretError::InvalidCallArgs),
                             }
                         }
                     ),+
@@ -1305,13 +1370,26 @@ impl Interpreter {
         None
     }
 
-    fn variable_value_mut(&mut self, identifier: &String) -> Option<&mut Value> {
-        for scope in self.scope_stack.iter_mut().rev() {
-            if let Some(value) = scope.vars.get_mut(identifier) {
-                return Some(value);
-            }
-        }
+    /// Insert a new reference object into memory.
+    fn new_ref_obj(&mut self, obj: RefObject) -> Rc<slotmap::DefaultKey> {
+        let key = self.ref_objects.insert(obj);
+        let rc = Rc::new(key);
+        self.refs.push(Rc::clone(&rc));
+        rc
+    }
 
-        None
+    fn pop_scope(&mut self) {
+        // pop from the top of the scope stack
+        drop(self.scope_stack.pop());
+
+        // now look through all of our ref objects and kill any with only one count
+        self.refs.retain(|rc| {
+            if Rc::strong_count(rc) <= 1 {
+                self.ref_objects.remove(**rc);
+                false
+            } else {
+                true
+            }
+        });
     }
 }

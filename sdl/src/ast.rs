@@ -138,11 +138,8 @@ pub enum Node {
     ScopeTerminator,
 
     // Array actions
-    /// An array push, taking in the identifier name of the array, and the node that will be inserted.
-    ArrayPush(String, Box<Node>),
-
     /// An array access.
-    ArrayAccess(String, Box<Node>),
+    ArrayAccess(Box<Node>, Box<Node>),
 
     // Arithmetic
     /// The addition of two nodes.
@@ -189,7 +186,7 @@ pub enum Node {
 
 /// A kind of node *value*, rather than just any node. Used to allow functions to specify
 /// their parameter types.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum NodeKind {
     Any,
@@ -416,13 +413,6 @@ impl AstParser {
                                 declare: false,
                                 value: Box::new(self.parse_value(true)?),
                             })
-                        }
-                        Some(Token::Op(Op::ArrayPush)) => {
-                            self.tokens.next();
-                            nodes.push(Node::ArrayPush(
-                                identifier,
-                                Box::new(self.parse_value(true)?),
-                            ));
                         }
                         Some(Token::Sep(Sep::BraceOpen)) => {
                             nodes.push(self.read_object(identifier)?)
@@ -708,7 +698,10 @@ impl AstParser {
                             self.next()?;
                             let index = self.parse_value(true)?;
                             self.read_sep(Sep::BracketClose)?;
-                            out_queue.push(Node::ArrayAccess(ident, Box::new(index)));
+                            out_queue.push(Node::ArrayAccess(
+                                Box::new(Node::Identifier(ident)),
+                                Box::new(index),
+                            ));
                         }
                         _ => out_queue.push(Node::Identifier(ident)),
                     }

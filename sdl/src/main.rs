@@ -13,6 +13,7 @@ use crate::interpret::{InterpretError, Interpreter, Value};
 mod ast;
 mod function;
 mod interpret;
+mod reference;
 mod tokenize;
 
 fn main() {

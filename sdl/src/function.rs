@@ -7,14 +7,14 @@ use crate::{
 pub struct Function {
     pub names: &'static [&'static str],
     pub arg_types: &'static [NodeKind],
-    pub func: Box<dyn Send + Sync + Fn(&Interpreter, Vec<Value>) -> Result<Value, InterpretError>>,
+    pub func: Box<dyn Send + Sync + Fn(&mut Interpreter, Vec<Value>) -> Result<Value, InterpretError>>,
 }
 
 impl Function {
     /// Instantiate a new function.
     pub fn new<F>(names: &'static [&'static str], arg_types: &'static [NodeKind], f: F) -> Self
     where
-        F: 'static + Send + Sync + Fn(&Interpreter, Vec<Value>) -> Result<Value, InterpretError>,
+        F: 'static + Send + Sync + Fn(&mut Interpreter, Vec<Value>) -> Result<Value, InterpretError>,
     {
         Self {
             names,
@@ -26,7 +26,7 @@ impl Function {
     /// Try to evaluate with this function. Returns `None` if arguments don't match.
     pub fn try_eval(
         &self,
-        interpreter: &Interpreter,
+        interpreter: &mut Interpreter,
         args: Vec<Value>,
     ) -> Option<Result<Value, InterpretError>> {
         if args.iter().zip(self.arg_types.iter()).any(|(a, b)| a != b) {
