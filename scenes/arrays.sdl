@@ -1,14 +1,5 @@
-let verts = []
+let nums = [1, 2, 3, 4, 5]
 
-for z in 0 to 10 {
-    for x in 0 to 10 {
-        verts << <x, 0, z>
-        verts << <x, 0, z>
-        verts << <x, 0, z>
-    }
-}
-
-mesh {
-    verts,
-    position: <0, 0, -10>
+for i in 0 to length(nums) {
+    print(nums[i])
 }

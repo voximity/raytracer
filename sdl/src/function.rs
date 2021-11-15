@@ -7,14 +7,18 @@ use crate::{
 pub struct Function {
     pub names: &'static [&'static str],
     pub arg_types: &'static [NodeKind],
-    pub func: Box<dyn Send + Sync + Fn(&mut Interpreter, Vec<Value>) -> Result<Value, InterpretError>>,
+    pub func:
+        Box<dyn Send + Sync + Fn(&mut Interpreter, Vec<Value>) -> Result<Value, InterpretError>>,
 }
 
 impl Function {
     /// Instantiate a new function.
     pub fn new<F>(names: &'static [&'static str], arg_types: &'static [NodeKind], f: F) -> Self
     where
-        F: 'static + Send + Sync + Fn(&mut Interpreter, Vec<Value>) -> Result<Value, InterpretError>,
+        F: 'static
+            + Send
+            + Sync
+            + Fn(&mut Interpreter, Vec<Value>) -> Result<Value, InterpretError>,
     {
         Self {
             names,

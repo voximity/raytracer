@@ -401,12 +401,25 @@ type ImageCache = HashMap<String, ImageBuffer<Rgb<u8>, Vec<u8>>>;
 /// AST data, scene data, and interpreting the AST at scene construction time to develop the
 /// scene.
 pub struct Interpreter {
+    /// The root node.
     root: ast::Node,
+    
+    /// The image cache, so images do not have to be re-loaded each time their path is referenced.
     images: ImageCache,
+
+    /// The scope stack.
     scope_stack: Vec<Scope>,
+
+    /// A list of object names that have been declared.
     object_names: Vec<String>,
+
+    /// All reference objects, scattered in memory.
     ref_objects: SlotMap<slotmap::DefaultKey, RefObject>,
+
+    /// All reference object references, reference-counted so they can be cleaned up when no longer referenced by anything.
     refs: Vec<Rc<slotmap::DefaultKey>>,
+
+    /// The perlin noise generator for the interpreter.
     perlin: Perlin,
 }
 
@@ -441,6 +454,7 @@ impl Interpreter {
         })
     }
 
+    /// Set a global variable (a var in the base of the scope stack).
     pub fn set_global(&mut self, identifier: String, value: Value) {
         self.scope_stack[0].vars.insert(identifier, value);
     }
@@ -477,8 +491,10 @@ impl Interpreter {
         // generate a scene
         let mut scene = Scene::default();
 
-        // clear object names
+        // reset state
         self.object_names = vec![];
+        self.refs = vec![];
+        self.ref_objects = SlotMap::new();
 
         // execute the scene
         self.run_scope(&mut scene, root)?;
@@ -581,25 +597,6 @@ impl Interpreter {
                 ast::Node::Call(name, args) => {
                     self.call_func(scene, name, args)?;
                 }
-                // ast::Node::ArrayPush(array, value) => {
-                //     let array = Value::from_node(self, scene, *array)?;
-                //     let value = Value::from_node(self, scene, *value)?;
-
-                //     match array {
-                //         Value::Ref(rc, NodeKind::Array) => {
-                //             let ro = self
-                //                 .ref_objects
-                //                 .get_mut(*rc)
-                //                 .ok_or(InterpretError::InvalidReference)?;
-
-                //             match ro {
-                //                 RefObject::Array(a) => a.push(value),
-                //                 _ => return Err(InterpretError::NonArrayVariable),
-                //             }
-                //         }
-                //         _ => return Err(InterpretError::InvalidCallArgs),
-                //     }
-                // }
                 ast::Node::Object {
                     name,
                     mut properties,
@@ -734,6 +731,7 @@ impl Interpreter {
                                             Value::Vector(v) => Some(v),
                                             _ => None,
                                         });
+
                                 let mut tris = vec![];
                                 loop {
                                     let v0 = match verts.next() {
@@ -1115,6 +1113,18 @@ impl Interpreter {
 
                     Ok(Value::Unit)
                 }),
+                Function::new(&["length"], &[NodeKind::Array], |s, v| {
+                    let mut v = v.into_iter();
+                    let key = match v.next().unwrap() {
+                        Value::Ref(k, _) => *k,
+                        _ => unreachable!(),
+                    };
+
+                    match s.ref_objects.get(key) {
+                        Some(RefObject::Array(a)) => Ok(Value::Number(a.len() as f64)),
+                        _ => return Err(InterpretError::InvalidReference),
+                    }
+                }),
 
                 // printing
                 Function::new(&["print"], &[NodeKind::String], |_, v| {
@@ -1378,6 +1388,8 @@ impl Interpreter {
         rc
     }
 
+    /// Pop the scope at the top of the scope stack.
+    /// This will also clean up unused reference objects.
     fn pop_scope(&mut self) {
         // pop from the top of the scope stack
         drop(self.scope_stack.pop());
