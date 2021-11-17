@@ -594,9 +594,9 @@ impl AstParser {
                         } else {
                             last_op = false;
                         }
-    
+
                         self.next()?;
-    
+
                         // get all the items in the array
                         let mut v = Vec::new();
                         loop {
@@ -607,19 +607,21 @@ impl AstParser {
                                     break;
                                 }
                             }
-    
+
                             // continuously scan for more items
                             let (next_item, ct) = match self.parse_value(true) {
                                 Ok(v) => (v, true),
-                                Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => (v, false),
+                                Err(AstError::ArithmeticExcessCloseParensError(Some(v))) => {
+                                    (v, false)
+                                }
                                 Err(e) => return Err(e),
                             };
                             v.push(next_item);
-    
+
                             if !ct {
                                 break;
                             }
-    
+
                             // if we hit the close token, stop the loop, just like before
                             if let Some(t) = self.tokens.peek() {
                                 if t == &Token::Sep(Sep::BracketClose) {
@@ -627,21 +629,18 @@ impl AstParser {
                                     break;
                                 }
                             }
-    
+
                             // if the next token wasn't the close token, expect the delimiter
                             self.read_sep(Sep::Comma)?;
                         }
-    
+
                         out_queue.push(Node::Array(v));
                     } else {
                         self.next()?;
                         let index = self.parse_value(true)?;
                         self.read_sep(Sep::BracketClose)?;
                         let indexing = out_queue.pop().unwrap();
-                        out_queue.push(Node::ArrayAccess(
-                            Box::new(indexing),
-                            Box::new(index),
-                        ));
+                        out_queue.push(Node::ArrayAccess(Box::new(indexing), Box::new(index)));
                     }
                 }
                 Token::Op(Op::Lt) if last_op => {

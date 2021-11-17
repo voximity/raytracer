@@ -403,7 +403,7 @@ type ImageCache = HashMap<String, ImageBuffer<Rgb<u8>, Vec<u8>>>;
 pub struct Interpreter {
     /// The root node.
     root: ast::Node,
-    
+
     /// The image cache, so images do not have to be re-loaded each time their path is referenced.
     images: ImageCache,
 
@@ -1084,6 +1084,7 @@ impl Interpreter {
                 Function::new(&["mul"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) * unwrap_variant!(v[1], Value::Number)))),
                 Function::new(&["div"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) / unwrap_variant!(v[1], Value::Number)))),
                 Function::new(&["mod"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number) % unwrap_variant!(v[1], Value::Number)))),
+                Function::new(&["pow"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number).powf(unwrap_variant!(v[1], Value::Number))))),
 
                 // vector operators
                 Function::new(&["add"], &[NodeKind::Vector, NodeKind::Vector], |_, v| Ok(Value::Vector(unwrap_variant!(v[0], Value::Vector) + unwrap_variant!(v[1], Value::Vector)))),
@@ -1108,6 +1109,28 @@ impl Interpreter {
 
                     match s.ref_objects.get_mut(key) {
                         Some(RefObject::Array(a)) => a.push(v.next().unwrap()),
+                        _ => return Err(InterpretError::InvalidReference),
+                    }
+
+                    Ok(Value::Unit)
+                }),
+                Function::new(&["set"], &[NodeKind::Array, NodeKind::Number, NodeKind::Any], |s, v| {
+                    let mut v = v.into_iter();
+                    let key = match v.next().unwrap() {
+                        Value::Ref(k, _) => *k,
+                        _ => unreachable!(),
+                    };
+
+                    match s.ref_objects.get_mut(key) {
+                        Some(RefObject::Array(a)) => {
+                            let index = unwrap_variant!(v.next().unwrap(), Value::Number) as usize;
+                            let value = v.next().unwrap();
+                            if index == a.len() {
+                                a.push(value);
+                            } else {
+                                a[index] = value;
+                            }
+                        }
                         _ => return Err(InterpretError::InvalidReference),
                     }
 
@@ -1194,6 +1217,7 @@ impl Interpreter {
                 Function::new(&["acos"], &[NodeKind::Number], float_func!(acos)),
                 Function::new(&["atan"], &[NodeKind::Number], float_func!(atan)),
                 Function::new(&["abs"], &[NodeKind::Number], float_func!(abs)),
+                Function::new(&["sqrt"], &[NodeKind::Number], float_func!(sqrt)),
                 Function::new(&["floor"], &[NodeKind::Number], float_func!(floor)),
                 Function::new(&["ceil"], &[NodeKind::Number], float_func!(ceil)),
                 Function::new(&["rad"], &[NodeKind::Number], float_func!(to_radians)),
@@ -1211,6 +1235,8 @@ impl Interpreter {
                         unwrap_variant!(v[2], Value::Number),
                     )))
                 }),
+                Function::new(&["min"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number).min(unwrap_variant!(v[1], Value::Number))))),
+                Function::new(&["max"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number).max(unwrap_variant!(v[1], Value::Number))))),
 
                 // vector functions
                 Function::new(&["normalize"], &[NodeKind::Vector], vector_func!(normalize, Vector)),

@@ -1,39 +1,56 @@
-let w = 48
-let h = 48
-let terrain = []
-
-sun { vector: <-0.8, -1, -0.2> }
-
-camera {
-    origin: <0, 4, 0>,
-    pitch: -0.5,
-    vw: 1920,
-    vh: 1080,
+fn fbm(x, y, base_freq, iterations) {
+    let v = 0
+    let freq = base_freq
+    let amp = 1
+    for i in 0 to iterations {
+        v = v + perlin(x * freq, y * freq) * amp
+        freq = freq * 2
+        amp = amp * 0.5
+    }
+    return v
 }
 
-for z in 0 to h {
+# generate the noisemap
+let w = 72
+let h = 72
+let fbm_iterations = 3
+let fbm_freq = 0.08
+let fbm_amp = 2
+let noisemap = []
+
+for y in 0 to h {
+    push(noisemap, [])
     for x in 0 to w {
-        push(terrain, perlin(x * 0.15, z * 0.15) * 2)
+        push(noisemap[y], fbm(x, y, fbm_freq, fbm_iterations) * fbm_amp)
     }
 }
 
-let verts = []
-for z in 0 to h - 1 {
-    for x in 0 to w - 1 {
-        push(verts, <x, terrain[x + z * w], z>)
-        push(verts, <x, terrain[x + (z + 1) * w], z + 1>)
-        push(verts, <x + 1, terrain[x + 1 + z * w], z>)
+# prepare the scene
+sun {
+    vector: <-0.8, -1, -0.2>,
+}
 
-        push(verts, <x, terrain[x + (z + 1) * w], z + 1>)
-        push(verts, <x + 1, terrain[x + 1 + (z + 1) * w], z + 1>)
-        push(verts, <x + 1, terrain[x + 1 + z * w], z>)
+camera {
+    origin: <-4, 2, 6>,
+    yaw: 0.3,
+    pitch: -0.3,
+}
+
+# generate the mesh
+let verts = []
+for y in 0 to h - 1 {
+    for x in 0 to w - 1 {
+        push(verts, <x, noisemap[y][x], y>)
+        push(verts, <x, noisemap[y + 1][x], y + 1>)
+        push(verts, <x + 1, noisemap[y][x + 1], y>)
+
+        push(verts, <x + 1, noisemap[y][x + 1], y>)
+        push(verts, <x, noisemap[y + 1][x], y + 1>)
+        push(verts, <x + 1, noisemap[y + 1][x + 1], y + 1>)
     }
 }
 
 mesh {
     verts,
-    position: <0, -3, -20>,
-    material: {
-        texture: solid(rgb(0, 180, 0))
-    }
+    position: <0, -3, -5>,
 }
