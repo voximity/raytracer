@@ -466,3 +466,7 @@ Here's a Cornell box with some icosahedrons inside to show you how fluidly both 
 ![A cornell box with an order 0 icosphere](/images/readme/11_22_2021_6.png)
 
 ![A cornell box with an order 3 icosphere](/images/readme/11_22_2021_7.png)
+
+One more bonus image with spheres randomly placed in space:
+
+![Bonus image!](/images/readme/11_22_2021_8.png)
