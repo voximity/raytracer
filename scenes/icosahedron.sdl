@@ -5,7 +5,7 @@ sun { vector: <-0.8, -1, -0.4> }
 # https://observablehq.com/@mourner/fast-icosphere-mesh
 
 # this is the # of subdivisions to perform
-let order = 2
+let order = 5
 
 let f = (1 + pow(5, 0.5)) / 2
 let T = pow(4, order)

@@ -1,34 +1,80 @@
-# scene prep
-sun { vector: <-0.8, -1, -0.4>, intensity: 0.6 }
+let vw = 512
+let vh = 512
+
 camera {
-    origin: <2, 2, 2>,
-    yaw: -0.25,
-    pitch: -0.2
+    vw, vh,
+    origin: <0, 0, 3>,
+    fov: 45
 }
 
-# planet settings
-let planet_center = <0, 0, -6>
-let noise_scale = 1
-let noise_influence = 0.07
+#####################
+# CORNELL BOX SETUP #
+#####################
 
-# fbm implementation
-fn fbm(x, y, z, o) {
-    let value = 0
-    let freq = 1
-    let amp = 1
-    for i in 0 to o {
-        value = value + perlin(x * freq, y * freq, z * freq) * amp
-        freq = freq * 2
-        amp = amp * 0.5
+# ceiling light
+aabb {
+    position: <0, 1, 0>,
+    size: <0.2, 0.0001, 0.2>,
+    material: {
+        emissivity: 1
     }
-    return value
 }
+
+area_light {
+    surface: "rectangle",
+    c00: <-0.25, 0.95, -0.25>,
+    c01: <-0.25, 0.95, 0.25>,
+    c10: <0.25, 0.95, -0.25>,
+    c11: <0.25, 0.95, 0.25>,
+    iterations: 64,
+    intensity: 0.12,
+}
+
+# floor
+plane {
+    origin: <0, -1, 0>,
+    normal: <0, 1, 0>
+}
+
+# ceiling
+plane {
+    origin: <0, 1, 0>,
+    normal: <0, -1, 0>
+}
+
+# back wall
+plane {
+    origin: <0, 0, -1>,
+    normal: <0, 0, 1>
+}
+
+# left wall
+plane {
+    origin: <-1, 0, 0>,
+    normal: <1, 0, 0>,
+    material: {
+        texture: solid(rgb(255, 0, 0))
+    }
+}
+
+# right wall
+plane {
+    origin: <1, 0, 0>,
+    normal: <-1, 0, 0>,
+    material: {
+        texture: solid(rgb(0, 255, 0))
+    }
+}
+
+##################
+# SCENE CONTENTS #
+##################
 
 # icosahedron generation
 # https://observablehq.com/@mourner/fast-icosphere-mesh
 
 # this is the # of subdivisions to perform
-let order = 5
+let order = 3
 
 let f = (1 + pow(5, 0.5)) / 2
 let T = pow(4, order)
@@ -81,17 +127,13 @@ for i in 0 to order {
     triangles_prev = triangles
 }
 
-# normalize verts + apply noise
+# normalize verts
 for i in 0 to len(vertices) {
     if i % 3 == 0 {
-        let v0 = vertices[i]
-        let v1 = vertices[i + 1]
-        let v2 = vertices[i + 2]
-        let noise = fbm(v0 * noise_scale, v1 * noise_scale, v2 * noise_scale, 2) * noise_influence
         let m = 1 / sqrt(pow(vertices[i], 2) + pow(vertices[i + 1], 2) + pow(vertices[i + 2], 2))
-        set(vertices, i, vertices[i] * (m + noise))
-        set(vertices, i + 1, vertices[i + 1] * (m + noise))
-        set(vertices, i + 2, vertices[i + 2] * (m + noise))
+        set(vertices, i, vertices[i] * m)
+        set(vertices, i + 1, vertices[i + 1] * m)
+        set(vertices, i + 2, vertices[i + 2] * m)
     }
 }
 
@@ -101,20 +143,4 @@ for i in 0 to len(triangles) {
     push(verts, <vertices[triangles[i] * 3], vertices[triangles[i] * 3 + 1], vertices[triangles[i] * 3 + 2]>)
 }
 
-mesh {
-    verts,
-    position: planet_center,
-    scale: 3,
-    material: {
-        texture: solid(rgb(40, 180, 40))
-    }
-}
-
-sphere {
-    position: planet_center,
-    radius: 2.9,
-    material: {
-        texture: solid(rgb(0, 0, 180)),
-        reflectiveness: 0.3,
-    }
-}
+mesh { verts, position: <0.3, -0.5, -0.5>, scale: 0.5 }

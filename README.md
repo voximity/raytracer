@@ -442,3 +442,27 @@ for i in 0 to len(a) {
     print("")
 }
 ```
+
+#### 11/22/2021
+
+I wrote an icosphere generator, which takes an icosahedron and subdivides it, normalizing the vertices at the end, which allows you to create spheres with very even distributions of similarly sized triangles all around.
+
+![An icosphere with order 0](/images/readme/11_22_2021_1.png)
+
+![An icosphere with order 2](/images/readme/11_22_2021_2.png)
+
+![An icosphere with order 5](/images/readme/11_22_2021_3.png)
+
+Then, I applied noise and added water to make this simple procedural planet generator:
+
+![A procedurally generated planet](/images/readme/11_22_2021_4.png)
+
+This image is a bit older, but I have set up a Cornell box scene whose contents is very easy to switch out on the fly:
+
+![A cornell box](/images/readme/11_22_2021_5.png)
+
+Here's a Cornell box with some icosahedrons inside to show you how fluidly both scenes can be combined:
+
+![A cornell box with an order 0 icosphere](/images/readme/11_22_2021_6.png)
+
+![A cornell box with an order 3 icosphere](/images/readme/11_22_2021_7.png)
