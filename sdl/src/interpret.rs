@@ -7,12 +7,12 @@ use std::{
 
 use image::{ImageBuffer, Rgb};
 use lazy_static::lazy_static;
-use noise::{NoiseFn, Perlin};
+use noise::{NoiseFn, Perlin, OpenSimplex};
 use rand::Rng;
 use raytracer::{
     lighting::{self, AreaSurface},
     material::{Color, Material, Texture},
-    math::{Lerp, Vector3},
+    math::{Lerp, Vector3, remap},
     object,
     scene::Scene,
     skybox,
@@ -421,6 +421,9 @@ pub struct Interpreter {
 
     /// The perlin noise generator for the interpreter.
     perlin: Perlin,
+
+    /// The simplex noise generator for the interpreter.
+    simplex: OpenSimplex,
 }
 
 impl Interpreter {
@@ -451,6 +454,7 @@ impl Interpreter {
             ref_objects: SlotMap::new(),
             refs: Vec::new(),
             perlin: Perlin::new(),
+            simplex: OpenSimplex::new(),
         })
     }
 
@@ -748,6 +752,11 @@ impl Interpreter {
                                     };
                                     tris.push(object::Triangle::new((v0, v1, v2), None, None));
                                 }
+
+                                if tris.is_empty() {
+                                    continue;
+                                }
+
                                 object::Mesh::new(tris, material)
                             };
 
@@ -755,7 +764,9 @@ impl Interpreter {
                                 mesh.scale(scale);
                             }
 
-                            mesh.center();
+                            if optional_property!(self, scene, properties, "recenter", Boolean).unwrap_or(true) {
+                                mesh.center();
+                            }
 
                             if let Some(rotate_xyz) = rotate_xyz {
                                 if rotate_zyx.is_some() {
@@ -1237,6 +1248,12 @@ impl Interpreter {
                 }),
                 Function::new(&["min"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number).min(unwrap_variant!(v[1], Value::Number))))),
                 Function::new(&["max"], &[NodeKind::Number, NodeKind::Number], |_, v| Ok(Value::Number(unwrap_variant!(v[0], Value::Number).max(unwrap_variant!(v[1], Value::Number))))),
+                Function::new(&["remap"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number, NodeKind::Number, NodeKind::Number], |_, v| {
+                    let x = unwrap_variant!(v[0], Value::Number);
+                    let a = unwrap_variant!(v[1], Value::Number)..unwrap_variant!(v[2], Value::Number);
+                    let b = unwrap_variant!(v[3], Value::Number)..unwrap_variant!(v[4], Value::Number);
+                    Ok(Value::Number(remap(x, a, b)))
+                }),
 
                 // vector functions
                 Function::new(&["normalize"], &[NodeKind::Vector], vector_func!(normalize, Vector)),
@@ -1259,6 +1276,17 @@ impl Interpreter {
                 }),
                 Function::new(&["perlin"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |s, v| {
                     Ok(Value::Number(s.perlin.get(
+                        [unwrap_variant!(v[0], Value::Number), unwrap_variant!(v[1], Value::Number), unwrap_variant!(v[2], Value::Number)]
+                    )))
+                }),
+
+                Function::new(&["simplex"], &[NodeKind::Number, NodeKind::Number], |s, v| {
+                    Ok(Value::Number(s.simplex.get(
+                        [unwrap_variant!(v[0], Value::Number), unwrap_variant!(v[1], Value::Number)]
+                    )))
+                }),
+                Function::new(&["simplex"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |s, v| {
+                    Ok(Value::Number(s.simplex.get(
                         [unwrap_variant!(v[0], Value::Number), unwrap_variant!(v[1], Value::Number), unwrap_variant!(v[2], Value::Number)]
                     )))
                 }),

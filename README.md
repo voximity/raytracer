@@ -470,3 +470,11 @@ Here's a Cornell box with some icosahedrons inside to show you how fluidly both 
 One more bonus image with spheres randomly placed in space:
 
 ![Bonus image!](/images/readme/11_22_2021_8.png)
+
+#### 12/6/2021
+
+It's been a while since I've worked on this project, but today I added a few features to the SDL while working on a procedural island generator, which uses simplex noise and fractal brownian motion:
+
+![A procedurally generated island](/images/readme/12_6_2021.png)
+
+Be sure to check out the source in `scenes/island.sdl`. I'd like to smooth these normals out soon!

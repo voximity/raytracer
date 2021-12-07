@@ -1,0 +1,113 @@
+let w = 128
+let h = 128
+let noise_freq = 0.06
+let fbm_octaves = 4
+let noise_amp = 48
+let water_pos = 0 - 5.5
+let sand_thresh = 2
+let inner_boost = 0.3
+let y_off = 0 - 6
+
+fn fbm(x, y, base_freq, iterations) {
+    let v = 0
+    let freq = base_freq
+    let amp = 1
+    for i in 0 to iterations {
+        v = v + simplex(x * freq, y * freq) * amp
+        freq = freq * 2
+        amp = amp * 0.5
+    }
+    return v
+}
+
+camera {
+    origin: <65, 10, 65>,
+    pitch: -0.2,
+    yaw: PI / -4 + 0.001,
+}
+
+skybox {
+    type: "cubemap",
+    image: "assets/space.png",
+}
+
+sun {
+    vector: <-0.8, -1, -0.2>,
+}
+
+let hw = w / 2
+let hh = h / 2
+let noisemap = []
+
+for z in 0 to h {
+    push(noisemap, [])
+    for x in 0 to w {
+        let dist = max(0, 1 - sqrt(pow((x - hw) / hw, 2) + pow((z - hh) / hh, 2)))
+        let dist_pow = pow(dist, 3)
+        let noise = fbm(x, z, noise_freq, fbm_octaves) * 0.5 + 0.5
+        let dist_offset = dist_pow * inner_boost
+        push(noisemap[z], remap(noise, 0, 1, inner_boost, 1) * dist_pow * noise_amp)
+    }
+}
+
+let grass_verts = []
+let sand_verts = []
+
+for z in 0 to w - 1 {
+    for x in 0 to h - 1 {
+        #aabb {
+        #    position: <x - hw, noisemap[z][x], z - hh>,
+        #    size: <0.5, 0.5, 0.5>,
+        #}
+
+        # generate the two triangles for the noisemap
+        if noisemap[z][x] < sand_thresh {
+            push(sand_verts, <x - hw, noisemap[z][x] + y_off, z - hh>)
+            push(sand_verts, <x - hw, noisemap[z + 1][x] + y_off, z + 1 - hh>)
+            push(sand_verts, <x + 1 - hw, noisemap[z][x + 1] + y_off, z - hh>)
+        } else {
+            push(grass_verts, <x - hw, noisemap[z][x] + y_off, z - hh>)
+            push(grass_verts, <x - hw, noisemap[z + 1][x] + y_off, z + 1 - hh>)
+            push(grass_verts, <x + 1 - hw, noisemap[z][x + 1] + y_off, z - hh>)
+        }
+
+        if noisemap[z][x + 1] < sand_thresh {
+            push(sand_verts, <x - hw, noisemap[z + 1][x] + y_off, z + 1 - hh>)
+            push(sand_verts, <x + 1 - hw, noisemap[z + 1][x + 1] + y_off, z + 1 - hh>)
+            push(sand_verts, <x + 1 - hw, noisemap[z][x + 1] + y_off, z - hh>)
+        } else {
+            push(grass_verts, <x - hw, noisemap[z + 1][x] + y_off, z + 1 - hh>)
+            push(grass_verts, <x + 1 - hw, noisemap[z + 1][x + 1] + y_off, z + 1 - hh>)
+            push(grass_verts, <x + 1 - hw, noisemap[z][x + 1] + y_off, z - hh>)
+        }
+    }
+}
+
+# the grass mesh
+mesh {
+    verts: grass_verts,
+    position: <0, 0, 0>,
+    recenter: false,
+    material: {
+        texture: solid(rgb(64, 156, 64))
+    }
+}
+
+# the sand mesh
+mesh {
+    verts: sand_verts,
+    position: <0, 0, 0>,
+    recenter: false,
+    material: {
+        texture: solid(rgb(197, 201, 121))
+    }
+}
+
+plane {
+    origin: <0, water_pos, 0>,
+    normal: <0, 1, 0>,
+    material: {
+        texture: solid(rgb(76, 126, 173)),
+        reflectiveness: 0.6,
+    }
+}
