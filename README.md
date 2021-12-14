@@ -478,3 +478,15 @@ It's been a while since I've worked on this project, but today I added a few fea
 ![A procedurally generated island](/images/readme/12_6_2021.png)
 
 Be sure to check out the source in `scenes/island.sdl`. I'd like to smooth these normals out soon!
+
+#### 12/13/2021
+
+I have since internally worked the entire mesh system, and now support recalculating normals, smoothing normals of vertices that are shared by multiple triangles. Moreover, you can now specify normals for each vertex manually in the SDL if you wish.
+
+Take a peek at this smoothened terrain that reflects into space!
+
+![Smooth terrain](/images/readme/12_13_2021_1.png)
+
+And here's the island from last week, but smooth this time.
+
+![Smooth island](/images/readme/12_13_2021_2.png)

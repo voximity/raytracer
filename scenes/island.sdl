@@ -51,8 +51,13 @@ for z in 0 to h {
 }
 
 let grass_verts = []
-let sand_verts = []
+for z in 0 to w {
+    for x in 0 to h {
+        push(grass_verts, <x - hw, noisemap[z][x] + y_off, z - hh>)
+    }
+}
 
+let tris = []
 for z in 0 to w - 1 {
     for x in 0 to h - 1 {
         #aabb {
@@ -60,46 +65,24 @@ for z in 0 to w - 1 {
         #    size: <0.5, 0.5, 0.5>,
         #}
 
-        # generate the two triangles for the noisemap
-        if noisemap[z][x] < sand_thresh {
-            push(sand_verts, <x - hw, noisemap[z][x] + y_off, z - hh>)
-            push(sand_verts, <x - hw, noisemap[z + 1][x] + y_off, z + 1 - hh>)
-            push(sand_verts, <x + 1 - hw, noisemap[z][x + 1] + y_off, z - hh>)
-        } else {
-            push(grass_verts, <x - hw, noisemap[z][x] + y_off, z - hh>)
-            push(grass_verts, <x - hw, noisemap[z + 1][x] + y_off, z + 1 - hh>)
-            push(grass_verts, <x + 1 - hw, noisemap[z][x + 1] + y_off, z - hh>)
-        }
+        push(tris, x + z * w)
+        push(tris, x + (z + 1) * w)
+        push(tris, x + 1 + z * w)
 
-        if noisemap[z][x + 1] < sand_thresh {
-            push(sand_verts, <x - hw, noisemap[z + 1][x] + y_off, z + 1 - hh>)
-            push(sand_verts, <x + 1 - hw, noisemap[z + 1][x + 1] + y_off, z + 1 - hh>)
-            push(sand_verts, <x + 1 - hw, noisemap[z][x + 1] + y_off, z - hh>)
-        } else {
-            push(grass_verts, <x - hw, noisemap[z + 1][x] + y_off, z + 1 - hh>)
-            push(grass_verts, <x + 1 - hw, noisemap[z + 1][x + 1] + y_off, z + 1 - hh>)
-            push(grass_verts, <x + 1 - hw, noisemap[z][x + 1] + y_off, z - hh>)
-        }
+        push(tris, x + (z + 1) * w)
+        push(tris, x + 1 + (z + 1) * w)
+        push(tris, x + 1 + z * w)
     }
 }
 
 # the grass mesh
 mesh {
     verts: grass_verts,
+    tris,
     position: <0, 0, 0>,
     recenter: false,
     material: {
         texture: solid(rgb(64, 156, 64))
-    }
-}
-
-# the sand mesh
-mesh {
-    verts: sand_verts,
-    position: <0, 0, 0>,
-    recenter: false,
-    material: {
-        texture: solid(rgb(197, 201, 121))
     }
 }
 
