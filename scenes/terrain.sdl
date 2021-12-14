@@ -1,3 +1,8 @@
+skybox {
+    type: "cubemap",
+    image: "assets/space.png",
+}
+
 fn fbm(x, y, base_freq, iterations) {
     let v = 0
     let freq = base_freq
@@ -34,23 +39,36 @@ camera {
     origin: <-4, 2, 6>,
     yaw: 0.3,
     pitch: -0.3,
+    vw: 1920,
+    vh: 1080,
 }
 
 # generate the mesh
 let verts = []
+for y in 0 to h {
+    for x in 0 to w {
+        push(verts, <x, noisemap[y][x], y>)
+    }
+}
+
+let tris = []
 for y in 0 to h - 1 {
     for x in 0 to w - 1 {
-        push(verts, <x, noisemap[y][x], y>)
-        push(verts, <x, noisemap[y + 1][x], y + 1>)
-        push(verts, <x + 1, noisemap[y][x + 1], y>)
+        push(tris, x + y * w)
+        push(tris, x + (y + 1) * w)
+        push(tris, x + 1 + y * w)
 
-        push(verts, <x + 1, noisemap[y][x + 1], y>)
-        push(verts, <x, noisemap[y + 1][x], y + 1>)
-        push(verts, <x + 1, noisemap[y + 1][x + 1], y + 1>)
+        push(tris, x + (y + 1) * w)
+        push(tris, x + 1 + (y + 1) * w)
+        push(tris, x + 1 + y * w)
     }
 }
 
 mesh {
     verts,
+    tris,
     position: <0, -3, -5>,
+    material: {
+        reflectiveness: 0.8,
+    }
 }

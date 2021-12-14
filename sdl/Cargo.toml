@@ -15,4 +15,4 @@ notify = "4.0.17"
 rand = "0.8.4"
 raytracer = { path = "../raytracer" }
 slotmap = "1.0.6"
-thiserror = "1.0.29"
+thiserror = "1.0"

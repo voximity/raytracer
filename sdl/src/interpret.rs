@@ -7,12 +7,12 @@ use std::{
 
 use image::{ImageBuffer, Rgb};
 use lazy_static::lazy_static;
-use noise::{NoiseFn, Perlin, OpenSimplex};
+use noise::{NoiseFn, OpenSimplex, Perlin};
 use rand::Rng;
 use raytracer::{
     lighting::{self, AreaSurface},
     material::{Color, Material, Texture},
-    math::{Lerp, Vector3, remap},
+    math::{remap, Lerp, Vector3},
     object,
     scene::Scene,
     skybox,
@@ -728,43 +728,98 @@ impl Interpreter {
                                     required_property!(self, scene, properties, "obj", String);
                                 object::Mesh::from_obj(obj, material)
                             } else {
-                                let mut verts =
+                                let mut mesh = object::Mesh::new(material);
+
+                                let verts =
                                     required_property!(self, scene, properties, "verts", Array)
                                         .into_iter()
                                         .filter_map(|v| match v {
                                             Value::Vector(v) => Some(v),
                                             _ => None,
-                                        });
+                                        })
+                                        .collect::<Vec<_>>();
 
-                                let mut tris = vec![];
-                                loop {
-                                    let v0 = match verts.next() {
-                                        Some(v) => v,
-                                        None => break,
-                                    };
-                                    let v1 = match verts.next() {
-                                        Some(v) => v,
-                                        None => break,
-                                    };
-                                    let v2 = match verts.next() {
-                                        Some(v) => v,
-                                        None => break,
-                                    };
-                                    tris.push(object::Triangle::new((v0, v1, v2), None, None));
+                                let mut tris =
+                                    required_property!(self, scene, properties, "tris", Array)
+                                        .into_iter()
+                                        .filter_map(|v| match v {
+                                            Value::Number(n) => Some(n as usize),
+                                            _ => None,
+                                        });
+                                
+                                let mut normals = Vec::new();
+                                let mut normals_grouped = Vec::new();
+                                if properties.contains_key("normals") {
+                                    normals =
+                                        required_property!(self, scene, properties, "normals", Array)
+                                            .into_iter()
+                                            .filter_map(|v| match v {
+                                                Value::Vector(v) => Some(v),
+                                                _ => None,
+                                            })
+                                            .collect::<Vec<_>>();
+
+                                    let mut normal_indices =
+                                        required_property!(self, scene, properties, "normal_indices", Array)
+                                            .into_iter()
+                                            .filter_map(|v| match v {
+                                                Value::Number(n) => Some(n as usize),
+                                                _ => None,
+                                            });
+                                    
+                                    loop {
+                                        let v0 = match normal_indices.next() {
+                                            Some(v) => v,
+                                            None => break,
+                                        };
+                                        let v1 = match normal_indices.next() {
+                                            Some(v) => v,
+                                            None => break,
+                                        };
+                                        let v2 = match normal_indices.next() {
+                                            Some(v) => v,
+                                            None => break,
+                                        };
+                                        normals_grouped.push([v0, v1, v2]);
+                                    }
                                 }
 
-                                if tris.is_empty() {
+                                let mut tris_grouped = Vec::new();
+                                loop {
+                                    let v0 = match tris.next() {
+                                        Some(v) => v,
+                                        None => break,
+                                    };
+                                    let v1 = match tris.next() {
+                                        Some(v) => v,
+                                        None => break,
+                                    };
+                                    let v2 = match tris.next() {
+                                        Some(v) => v,
+                                        None => break,
+                                    };
+                                    tris_grouped.push([v0, v1, v2]);
+                                }
+
+                                if tris_grouped.is_empty() {
                                     continue;
                                 }
 
-                                object::Mesh::new(tris, material)
+                                mesh.verts = verts;
+                                mesh.tris = tris_grouped;
+                                mesh.normals = normals;
+                                mesh.tri_normals = normals_grouped;
+
+                                mesh
                             };
 
                             if scale != 1. {
                                 mesh.scale(scale);
                             }
 
-                            if optional_property!(self, scene, properties, "recenter", Boolean).unwrap_or(true) {
+                            if optional_property!(self, scene, properties, "recenter", Boolean)
+                                .unwrap_or(true)
+                            {
                                 mesh.center();
                             }
 
@@ -786,7 +841,11 @@ impl Interpreter {
                                 mesh.shift(position);
                             }
 
-                            mesh.recalculate();
+                            if mesh.normals.is_empty() {
+                                mesh.recalculate_normals();
+                            }
+
+                            mesh.generate_sbvh();
                             scene.objects.push(Box::new(mesh));
                         }
                         "plane" => {

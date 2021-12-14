@@ -446,3 +446,33 @@ impl TreeNode {
         }
     }
 }
+
+#[derive(Clone)]
+pub struct Triangle {
+    v: [Vector3; 3],
+    bounding_box: Aabb,
+}
+
+impl Triangle {
+    pub fn new(v0: Vector3, v1: Vector3, v2: Vector3) -> Self {
+        let bounding_box = Aabb::from_vecs(&[v0, v1, v2]);
+        Self {
+            v: [v0, v1, v2],
+            bounding_box,
+        }
+    }
+}
+
+impl Primitive for Triangle {
+    fn points(&self) -> &[Vector3] {
+        &self.v
+    }
+
+    fn split(&self, _split: Split) -> (Self, Option<Self>) {
+        (self.clone(), None) // TODO: this eventually
+    }
+
+    fn bounding_box(&self) -> &Aabb {
+        &self.bounding_box
+    }
+}

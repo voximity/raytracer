@@ -238,7 +238,10 @@ for, say, `camera`. Read on to see what properties are valid for what objects.
   * `material` (dictionary), see below
 * `mesh` (a scene object)
   * `mesh`\* (string), the filename of the OBJ to load from, or alternatively:
-  * `verts`\* (array of vectors), the vertex buffer to use for the mesh (length should be divisible by 3, every 3 verts = a triangle)
+  * `verts`\* (array of vectors), the vertex buffer to use for the mesh, and
+  * `tris`\* (array of numbers), an array of numbers where each 3 consecutive numbers points to 3 different vertices in the `verts` array
+  * `normals` (array of vectors), *pass only if specifying verts/tris*, the normal buffer to use for the mesh, and
+  * `normal_indices` (array of numbers), *pass only if specifying verts/tris/normals*, an array of numbers where each 3 consecutive numbers points to 3 different normals in the `normals` array
   * `position` (vector), the center of the mesh
   * `scale` (number), the scale factor
   * `rotate_xyz` (vector), a rotation vector for each axis (all in radians), applied in XYZ order

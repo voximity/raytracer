@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     acceleration,
     material::Material,
@@ -5,174 +7,128 @@ use crate::{
     scene::EPSILON,
 };
 
-use super::{AabbIntersector, Hit, Intersect, SceneObject};
+use super::{Hit, Intersect, SceneObject};
 
-#[derive(Clone, Debug)]
-pub struct Triangle {
-    /// The vertices of the triangle.
-    v: [Vector3; 3],
-
-    /// The texcoords of each vertex.
-    texcoords: Option<(u32, u32, u32)>,
-
-    /// The normals of each vertex. If `None`, the normal of the entire triangle will be used.
-    normals: Option<(u32, u32, u32)>,
-
-    /// The precomputed edge 1.
-    edge1: Vector3,
-
-    /// The precomputed edge 2.
-    edge2: Vector3,
-
-    /// The precomputed normal.
-    normal: Vector3,
-
-    /// The bounding box.
-    bounding_box: acceleration::Aabb,
-}
-
-#[derive(Debug, Clone)]
 struct TriIntersect {
     p: Vector3,
     t: f64,
-    u: f64,
-    v: f64,
+    u: f32,
+    v: f32,
 }
 
-impl Triangle {
-    /// Create a new triangle. It must be `recalculate`d at some point before its usage.
-    pub fn new(
-        (v0, v1, v2): (Vector3, Vector3, Vector3),
-        texcoords: Option<(u32, u32, u32)>,
-        normals: Option<(u32, u32, u32)>,
-    ) -> Self {
-        let v = [v0, v1, v2];
-        let bounding_box = acceleration::Aabb::from_vecs(&v);
-        Self {
-            v,
-            texcoords,
-            normals,
-            edge1: Vector3::default(),
-            edge2: Vector3::default(),
-            normal: Vector3::default(),
-            bounding_box,
-        }
+fn triangle_normal(v0: Vector3, v1: Vector3, v2: Vector3) -> Vector3 {
+    let edge1 = v1 - v0;
+    let edge2 = v2 - v0;
+    edge1.cross(edge2).normalize()
+}
+
+fn triangle_intersect(v0: Vector3, v1: Vector3, v2: Vector3, ray: &Ray) -> Option<TriIntersect> {
+    let edge1 = v1 - v0;
+    let edge2 = v2 - v0;
+
+    let h = ray.direction.cross(edge2);
+    let a = edge1.dot(h);
+    if a > -EPSILON && a < EPSILON {
+        return None;
     }
 
-    fn recalculate(&mut self) {
-        self.edge1 = self.v[1] - self.v[0];
-        self.edge2 = self.v[2] - self.v[0];
-        self.normal = self.edge1.cross(self.edge2).normalize();
-        self.bounding_box = acceleration::Aabb::from_vecs(&self.v);
+    let f = 1. / a;
+    let s = ray.origin - v0;
+    let u = f * s.dot(h);
+    if !(0.0..=1.0).contains(&u) {
+        return None;
     }
 
-    // Muller-Trombore ray-triangle intersection algorithm
-    fn intersect(&self, ray: &Ray) -> Option<TriIntersect> {
-        let h = ray.direction.cross(self.edge2);
-        let a = self.edge1.dot(h);
-        if a > -EPSILON && a < EPSILON {
-            return None;
-        }
-
-        let f = 1. / a;
-        let s = ray.origin - self.v[0];
-        let u = f * s.dot(h);
-        if !(0.0..=1.0).contains(&u) {
-            return None;
-        }
-
-        let q = s.cross(self.edge1);
-        let v = f * ray.direction.dot(q);
-        if v < 0.0 || u + v > 1.0 {
-            return None;
-        }
-
-        let t = f * self.edge2.dot(q);
-        if t > EPSILON {
-            Some(TriIntersect {
-                p: ray.along(t),
-                t,
-                u,
-                v,
-            })
-        } else {
-            None
-        }
+    let q = s.cross(edge1);
+    let v = f * ray.direction.dot(q);
+    if v < 0.0 || u + v > 1.0 {
+        return None;
     }
 
-    fn uvs(&self, i: &TriIntersect, tc: &[(f32, f32)]) -> Option<(f32, f32)> {
-        match self.texcoords {
-            None => None,
-            Some((a, b, c)) => {
-                let (a, b, c) = (&tc[a as usize], &tc[b as usize], &tc[c as usize]);
-                let (iu, iv, iw) = (i.u as f32, i.v as f32, 1. - i.u as f32 - i.v as f32);
-                let u = a.0 * iw + b.0 * iu + c.0 * iv as f32;
-                let v = a.1 * iw + b.1 * iu + c.1 * iv as f32;
-                Some((u.rem_euclid(1.), (1. - v).rem_euclid(1.)))
-            }
-        }
-    }
-
-    fn normal(&self, i: &TriIntersect, ns: &[Vector3]) -> Vector3 {
-        match self.normals {
-            None => self.normal,
-            Some((a, b, c)) => {
-                let (a, b, c) = (&ns[a as usize], &ns[b as usize], &ns[c as usize]);
-                let (u, v, w) = (1. - i.u - i.v, i.u, i.v);
-                *a * u + *b * v + *c * w
-            }
-        }
+    let t = f * edge2.dot(q);
+    if t > EPSILON {
+        Some(TriIntersect {
+            p: ray.along(t),
+            t,
+            u: u as f32,
+            v: v as f32,
+        })
+    } else {
+        None
     }
 }
 
-impl acceleration::Primitive for Triangle {
-    fn points(&self) -> &[Vector3] {
-        &self.v
+fn triangle_intersect_uvs(
+    v0: usize,
+    v1: usize,
+    v2: usize,
+    tc: &[(f32, f32)],
+    i: &TriIntersect,
+) -> (f32, f32) {
+    if tc.len() == 0 {
+        return (0., 0.);
     }
 
-    fn split(&self, _split: acceleration::Split) -> (Self, Option<Self>) {
-        (self.clone(), None) // TODO: this eventually
-    }
+    let (a, b, c) = (&tc[v0], &tc[v1], &tc[v2]);
+    let (iu, iv, iw) = (i.u, i.v, 1. - i.u - i.v);
+    let u = a.0 * iw + b.0 * iu + c.0 * iv;
+    let v = a.1 * iw + b.1 * iu + c.1 * iv;
+    (u.rem_euclid(1.), (1. - v).rem_euclid(1.))
+}
 
-    fn bounding_box(&self) -> &acceleration::Aabb {
-        &self.bounding_box
-    }
+fn triangle_intersect_normal(
+    v0: usize,
+    v1: usize,
+    v2: usize,
+    ns: &[Vector3],
+    i: &TriIntersect,
+) -> Vector3 {
+    let (a, b, c) = (&ns[v0], &ns[v1], &ns[v2]);
+    let (u, v, w) = (1. - i.u - i.v, i.u, i.v);
+    *a * u as f64 + *b * v as f64 + *c * w as f64
 }
 
 pub struct Mesh {
-    pub triangles: Vec<Triangle>,
-    pub sbvh: Option<acceleration::TreeNode>,
-    pub bounding_box: AabbIntersector,
-    pub material: Material,
-    pub texcoords: Vec<(f32, f32)>,
-    pub normals: Vec<Vector3>,
-    pub rotation: Matrix,
-}
+    /// A list of unique vertices to use in the mesh.
+    pub verts: Vec<Vector3>,
 
-impl Clone for Mesh {
-    fn clone(&self) -> Self {
-        Self {
-            triangles: self.triangles.clone(),
-            sbvh: None,
-            bounding_box: self.bounding_box.clone(),
-            material: self.material.clone(),
-            texcoords: self.texcoords.clone(),
-            normals: self.normals.clone(),
-            rotation: self.rotation.clone(),
-        }
-    }
+    /// A list of triangles; each triangle stores an index into the `verts` `Vec`.
+    pub tris: Vec<[usize; 3]>,
+
+    /// A list of unique normals to use in the mesh.
+    pub normals: Vec<Vector3>,
+
+    /// A list of triangle normals; each triangle stores an index into the `normals` `Vec`.
+    ///
+    /// **Indices are shared with `tris`.**
+    pub tri_normals: Vec<[usize; 3]>,
+
+    /// A list of each vertex's texture coordinates.
+    pub texcoords: Vec<(f32, f32)>,
+
+    /// A list of each triangle vertex's texture coordinates, pointing to an index in `texcoords`.
+    ///
+    /// **Indices are shared with `tris`.**
+    pub tri_texcoords: Vec<[usize; 3]>,
+
+    /// The material of this object.
+    pub material: Material,
+
+    /// The SBVH acceleration structure of this mesh.
+    pub sbvh: Option<acceleration::TreeNode>,
 }
 
 impl Mesh {
-    pub fn new(triangles: Vec<Triangle>, material: Material) -> Self {
+    pub fn new(material: Material) -> Self {
         Self {
-            triangles,
-            sbvh: None,
-            bounding_box: Default::default(),
-            material,
-            texcoords: Vec::new(),
+            verts: Vec::new(),
+            tris: Vec::new(),
             normals: Vec::new(),
-            rotation: Matrix::default(),
+            tri_normals: Vec::new(),
+            texcoords: Vec::new(),
+            tri_texcoords: Vec::new(),
+            material,
+            sbvh: None,
         }
     }
 
@@ -188,182 +144,183 @@ impl Mesh {
 
         let model = models.into_iter().next().unwrap();
 
-        let texcoords_count = model.mesh.texcoords.len() / 2;
-        let mut texcoords_iter = model.mesh.texcoords.into_iter();
-        let mut texcoords = vec![];
-
-        while texcoords.len() < texcoords_count {
-            texcoords.push((
-                texcoords_iter.next().unwrap(),
-                texcoords_iter.next().unwrap(),
-            ));
+        // Gather all vertices
+        let mut verts = Vec::new();
+        let mut verts_iter = model.mesh.positions.into_iter().peekable();
+        while verts_iter.peek().is_some() {
+            let v = verts_iter.by_ref().take(3).collect::<Vec<_>>();
+            verts.push(Vector3::new(v[0] as f64, v[1] as f64, v[2] as f64));
         }
 
-        let normals_count = model.mesh.normals.len() / 3;
-        let mut normals_iter = model.mesh.normals.into_iter();
-        let mut normals = vec![];
-
-        while normals.len() < normals_count {
-            normals.push(Vector3::new(
-                normals_iter.next().unwrap() as f64,
-                normals_iter.next().unwrap() as f64,
-                normals_iter.next().unwrap() as f64,
-            ))
+        // Gather all texcoords
+        let mut texcoords = Vec::new();
+        let mut texcoords_iter = model.mesh.texcoords.into_iter().peekable();
+        while texcoords_iter.peek().is_some() {
+            let tc = texcoords_iter.by_ref().take(2).collect::<Vec<_>>();
+            texcoords.push((tc[0], tc[1]))
         }
 
-        let tri_count = model.mesh.indices.len() / 3;
-        let mut iter = model.mesh.indices.into_iter();
-
-        let mut texc_iter = model.mesh.texcoord_indices.into_iter();
-        let mut norm_iter = model.mesh.normal_indices.into_iter();
-
-        let mut triangles = vec![];
-        while triangles.len() < tri_count {
-            let v0i = iter.next().unwrap();
-            let v1i = iter.next().unwrap();
-            let v2i = iter.next().unwrap();
-
-            triangles.push(Triangle::new(
-                (
-                    Vector3::new(
-                        model.mesh.positions[v0i as usize * 3] as f64,
-                        model.mesh.positions[v0i as usize * 3 + 1] as f64,
-                        model.mesh.positions[v0i as usize * 3 + 2] as f64,
-                    ),
-                    Vector3::new(
-                        model.mesh.positions[v1i as usize * 3] as f64,
-                        model.mesh.positions[v1i as usize * 3 + 1] as f64,
-                        model.mesh.positions[v1i as usize * 3 + 2] as f64,
-                    ),
-                    Vector3::new(
-                        model.mesh.positions[v2i as usize * 3] as f64,
-                        model.mesh.positions[v2i as usize * 3 + 1] as f64,
-                        model.mesh.positions[v2i as usize * 3 + 2] as f64,
-                    ),
-                ),
-                if texcoords.is_empty() {
-                    None
-                } else {
-                    Some((
-                        texc_iter.next().unwrap(),
-                        texc_iter.next().unwrap(),
-                        texc_iter.next().unwrap(),
-                    ))
-                },
-                if normals.is_empty() {
-                    None
-                } else {
-                    Some((
-                        norm_iter.next().unwrap(),
-                        norm_iter.next().unwrap(),
-                        norm_iter.next().unwrap(),
-                    ))
-                },
-            ));
+        // Gather all normals
+        let mut normals = Vec::new();
+        let mut normals_iter = model.mesh.normals.into_iter().peekable();
+        while normals_iter.peek().is_some() {
+            let ns = normals_iter.by_ref().take(3).collect::<Vec<_>>();
+            normals.push(Vector3::new(ns[0] as f64, ns[1] as f64, ns[2] as f64));
         }
+
+        // Gather all vertex indices (into triangles)
+        let mut tris = Vec::new();
+        let mut tris_iter = model.mesh.indices.into_iter().peekable();
+        while tris_iter.peek().is_some() {
+            let v = tris_iter.by_ref().take(3).collect::<Vec<_>>();
+            tris.push([v[0] as usize, v[1] as usize, v[2] as usize]);
+        }
+
+        // Gather all texcoord indices
+        let mut texcoord_indices = Vec::new();
+        let mut texcoord_indices_iter = model.mesh.texcoord_indices.into_iter().peekable();
+        while texcoord_indices_iter.peek().is_some() {
+            let v = texcoord_indices_iter.by_ref().take(3).collect::<Vec<_>>();
+            texcoord_indices.push([v[0] as usize, v[1] as usize, v[2] as usize]);
+        }
+
+        // Gather all normal indices
+        let mut normal_indices = Vec::new();
+        let mut normal_indices_iter = model.mesh.normal_indices.into_iter().peekable();
+        while normal_indices_iter.peek().is_some() {
+            let v = normal_indices_iter.by_ref().take(3).collect::<Vec<_>>();
+            normal_indices.push([v[0] as usize, v[1] as usize, v[2] as usize]);
+        }
+
         Self {
-            triangles,
-            sbvh: None,
-            material,
-            bounding_box: AabbIntersector::default(),
-            texcoords,
+            verts,
+            tris,
             normals,
-            rotation: Matrix::default(),
+            tri_normals: normal_indices,
+            texcoords,
+            tri_texcoords: texcoord_indices,
+            material,
+            sbvh: None,
         }
     }
 
-    /// Centers the mesh so that its bounding box center is at the origin.
+    /// Recalculate the mesh's normals.
+    pub fn recalculate_normals(&mut self) {
+        // Empty the normals and vert_normals vecs
+        self.normals = Vec::new();
+        self.tri_normals = Vec::new();
+
+        // Populate the vertex map
+        let mut vert_map: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (idx, tri) in self.tris.iter().enumerate() {
+            for &c in tri {
+                vert_map
+                    .entry(c)
+                    .and_modify(|e| e.push(idx))
+                    .or_insert_with(|| vec![idx]);
+            }
+
+            self.tri_normals.push([0, 0, 0]);
+        }
+
+        // For each vertex, compute all of its adjoined triangles' normals
+        for (vert_idx, tris) in vert_map.into_iter() {
+            let normals = tris
+                .iter()
+                .map(|idx| &self.tris[*idx])
+                .map(|tri| {
+                    triangle_normal(self.verts[tri[0]], self.verts[tri[1]], self.verts[tri[2]])
+                })
+                .collect::<Vec<_>>();
+
+            // Sum up all of the normals
+            let mut agg_norm = Vector3::default();
+            for normal in normals.iter() {
+                agg_norm += *normal;
+            }
+
+            // Insert the calculated normal into the normals Vec
+            self.normals
+                .push((agg_norm / normals.len() as f64).normalize());
+
+            for tri in tris {
+                for n in 0..3 {
+                    if self.tris[tri][n] == vert_idx {
+                        self.tri_normals[tri][n] = self.normals.len() - 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// (Re)generate this mesh's SBVH.
+    pub fn generate_sbvh(&mut self) {
+        // Bake the mesh's triangles into a list of SBVH tris.
+        let tris = self
+            .tris
+            .iter()
+            .map(|tri| {
+                acceleration::Triangle::new(
+                    self.verts[tri[0]],
+                    self.verts[tri[1]],
+                    self.verts[tri[2]],
+                )
+            })
+            .collect::<Vec<_>>();
+
+        self.sbvh = Some(acceleration::Sbvh::new(&tris).into());
+    }
+
+    /// Shift all vertices by some vector.
+    pub fn shift(&mut self, delta: Vector3) {
+        self.verts.iter_mut().for_each(|v| *v += delta);
+    }
+
     pub fn center(&mut self) {
         let mut min = VECTOR_MAX;
         let mut max = VECTOR_MIN;
 
-        for tri in self.triangles.iter() {
-            for v in tri.v {
-                min.x = min.x.min(v.x);
-                min.y = min.y.min(v.y);
-                min.z = min.z.min(v.z);
-                max.x = max.x.max(v.x);
-                max.y = max.y.max(v.y);
-                max.z = max.z.max(v.z);
-            }
+        for v in self.verts.iter() {
+            min.x = min.x.min(v.x);
+            min.y = min.y.min(v.y);
+            min.z = min.z.min(v.z);
+            max.x = max.x.max(v.x);
+            max.y = max.y.max(v.y);
+            max.z = max.z.max(v.z);
         }
 
         self.shift((min + max) * -0.5);
     }
 
-    pub fn shift(&mut self, delta: Vector3) {
-        for tri in self.triangles.iter_mut() {
-            tri.v[0] += delta;
-            tri.v[1] += delta;
-            tri.v[2] += delta;
-        }
-    }
-
+    /// Scale all vertices by some vector.
     pub fn scale(&mut self, delta: f64) {
-        for tri in self.triangles.iter_mut() {
-            tri.v[0] *= delta;
-            tri.v[1] *= delta;
-            tri.v[2] *= delta;
-        }
+        self.verts.iter_mut().for_each(|v| *v *= delta);
     }
 
+    /// Rotate the mesh in XYZ order.
     pub fn rotate_xyz(&mut self, rot: Vector3) {
         let rot = Matrix::from_euler_xyz(-rot.x, -rot.y, -rot.z);
-        self.rotation = self.rotation * rot;
 
-        for tri in self.triangles.iter_mut() {
-            tri.v[0] = (rot * Matrix::from(tri.v[0])).pos();
-            tri.v[1] = (rot * Matrix::from(tri.v[1])).pos();
-            tri.v[2] = (rot * Matrix::from(tri.v[2])).pos();
+        for vert in self.verts.iter_mut() {
+            *vert = (rot * Matrix::from(*vert)).pos();
         }
-    }
-
-    pub fn rotate_zyx(&mut self, rot: Vector3) {
-        let rot = Matrix::from_euler_zyx(-rot.x, -rot.y, -rot.z);
-        self.rotation = self.rotation * rot;
-
-        for tri in self.triangles.iter_mut() {
-            tri.v[0] = (rot * Matrix::from(tri.v[0])).pos();
-            tri.v[1] = (rot * Matrix::from(tri.v[1])).pos();
-            tri.v[2] = (rot * Matrix::from(tri.v[2])).pos();
-        }
-    }
-
-    pub fn recalculate(&mut self) {
-        let vecs = self
-            .triangles
-            .iter_mut()
-            .map(|v| {
-                v.recalculate();
-                &v.v
-            })
-            .flatten()
-            .collect::<Vec<_>>();
-
-        let min_x = vecs.iter().map(|v| v.x).fold(f64::NAN, f64::min);
-        let max_x = vecs.iter().map(|v| v.x).fold(f64::NAN, f64::max);
-        let min_y = vecs.iter().map(|v| v.y).fold(f64::NAN, f64::min);
-        let max_y = vecs.iter().map(|v| v.y).fold(f64::NAN, f64::max);
-        let min_z = vecs.iter().map(|v| v.z).fold(f64::NAN, f64::min);
-        let max_z = vecs.iter().map(|v| v.z).fold(f64::NAN, f64::max);
-
-        let center = Vector3::new(
-            (min_x + max_x) * 0.5,
-            (min_y + max_y) * 0.5,
-            (min_z + max_z) * 0.5,
-        );
-        let max = Vector3::new(max_x, max_y, max_z);
-
-        self.bounding_box = AabbIntersector {
-            pos: center,
-            size: max - center,
-        };
 
         for norm in self.normals.iter_mut() {
-            *norm = (self.rotation * Matrix::from(*norm)).pos();
+            *norm = (rot * Matrix::from(*norm)).pos();
+        }
+    }
+
+    /// Rotate the mesh in ZYX order.
+    pub fn rotate_zyx(&mut self, rot: Vector3) {
+        let rot = Matrix::from_euler_zyx(-rot.x, -rot.y, -rot.z);
+
+        for vert in self.verts.iter_mut() {
+            *vert = (rot * Matrix::from(*vert)).pos();
         }
 
-        self.sbvh = Some(acceleration::Sbvh::new(&self.triangles).into());
+        for norm in self.normals.iter_mut() {
+            *norm = (rot * Matrix::from(*norm)).pos();
+        }
     }
 
     fn sbvh_intersection(&self, node: &acceleration::TreeNode, ray: &Ray) -> Option<Vec<usize>> {
@@ -397,21 +354,24 @@ impl Intersect for Mesh {
             None => return None,
         }
         .into_iter()
-        .map(|i| &self.triangles[i])
+        .map(|i| (i, &self.tris[i]))
         .collect::<Vec<_>>();
 
         if tris.is_empty() {
             return None;
         }
 
-        // find all triangles that intersect our ray
+        // find the triangles that intersect our ray
         let mut intersected_tris = tris
             .iter()
-            .filter_map(|t| t.intersect(ray).map(|h| (t, h)))
+            .filter_map(|(i, t)| {
+                triangle_intersect(self.verts[t[0]], self.verts[t[1]], self.verts[t[2]], ray)
+                    .map(|h| (i, t, h))
+            })
             .collect::<Vec<_>>();
 
-        // and sort them by nearness
-        intersected_tris.sort_by(|(_, ta), (_, tb)| {
+        // then sort them by nearness
+        intersected_tris.sort_by(|(_, _, ta), (_, _, tb)| {
             ta.t.partial_cmp(&tb.t).unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -421,30 +381,59 @@ impl Intersect for Mesh {
             0 => None,
 
             // one hit: return the only hit, where t_far is also t_near
-            1 => Some(Hit::new(
-                intersected_tris[0]
-                    .0
-                    .normal(&intersected_tris[0].1, &self.normals),
-                (intersected_tris[0].1.t, intersected_tris[0].1.p),
-                (intersected_tris[0].1.t, intersected_tris[0].1.p),
-                intersected_tris[0]
-                    .0
-                    .uvs(&intersected_tris[0].1, &self.texcoords)
-                    .unwrap_or_default(),
-            )),
+            1 => {
+                let t = &intersected_tris[0];
+                Some(Hit::new(
+                    triangle_intersect_normal(
+                        self.tri_normals[*t.0][0],
+                        self.tri_normals[*t.0][1],
+                        self.tri_normals[*t.0][2],
+                        &self.normals,
+                        &t.2,
+                    ),
+                    (t.2.t, t.2.p),
+                    (t.2.t, t.2.p),
+                    if self.tri_texcoords.len() > 0 {
+                        triangle_intersect_uvs(
+                            self.tri_texcoords[*t.0][0],
+                            self.tri_texcoords[*t.0][1],
+                            self.tri_texcoords[*t.0][2],
+                            &self.texcoords,
+                            &t.2,
+                        )
+                    } else {
+                        (0., 0.)
+                    },
+                ))
+            }
 
-            // two hits: return the first hit, but t_far is the t_near of the second hit (assuming we leave the mesh at this point)
-            _ => Some(Hit::new(
-                intersected_tris[0]
-                    .0
-                    .normal(&intersected_tris[0].1, &self.normals),
-                (intersected_tris[0].1.t, intersected_tris[0].1.p),
-                (intersected_tris[1].1.t, intersected_tris[1].1.p),
-                intersected_tris[0]
-                    .0
-                    .uvs(&intersected_tris[0].1, &self.texcoords)
-                    .unwrap_or_default(),
-            )),
+            // 2+ hits: return the first hit, but with a proper t_far
+            _ => {
+                let t = &intersected_tris[0];
+                let t1 = &intersected_tris[1];
+                Some(Hit::new(
+                    triangle_intersect_normal(
+                        self.tri_normals[*t.0][0],
+                        self.tri_normals[*t.0][1],
+                        self.tri_normals[*t.0][2],
+                        &self.normals,
+                        &t.2,
+                    ),
+                    (t.2.t, t.2.p),
+                    (t1.2.t, t1.2.p),
+                    if self.tri_texcoords.len() > 0 {
+                        triangle_intersect_uvs(
+                            self.tri_texcoords[*t.0][0],
+                            self.tri_texcoords[*t.0][1],
+                            self.tri_texcoords[*t.0][2],
+                            &self.texcoords,
+                            &t.2,
+                        )
+                    } else {
+                        (0., 0.)
+                    },
+                ))
+            }
         }
     }
 }
