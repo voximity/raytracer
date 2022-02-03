@@ -746,27 +746,33 @@ impl Interpreter {
                                             Value::Number(n) => Some(n as usize),
                                             _ => None,
                                         });
-                                
+
                                 let mut normals = Vec::new();
                                 let mut normals_grouped = Vec::new();
                                 if properties.contains_key("normals") {
-                                    normals =
-                                        required_property!(self, scene, properties, "normals", Array)
-                                            .into_iter()
-                                            .filter_map(|v| match v {
-                                                Value::Vector(v) => Some(v),
-                                                _ => None,
-                                            })
-                                            .collect::<Vec<_>>();
+                                    normals = required_property!(
+                                        self, scene, properties, "normals", Array
+                                    )
+                                    .into_iter()
+                                    .filter_map(|v| match v {
+                                        Value::Vector(v) => Some(v),
+                                        _ => None,
+                                    })
+                                    .collect::<Vec<_>>();
 
-                                    let mut normal_indices =
-                                        required_property!(self, scene, properties, "normal_indices", Array)
-                                            .into_iter()
-                                            .filter_map(|v| match v {
-                                                Value::Number(n) => Some(n as usize),
-                                                _ => None,
-                                            });
-                                    
+                                    let mut normal_indices = required_property!(
+                                        self,
+                                        scene,
+                                        properties,
+                                        "normal_indices",
+                                        Array
+                                    )
+                                    .into_iter()
+                                    .filter_map(|v| match v {
+                                        Value::Number(n) => Some(n as usize),
+                                        _ => None,
+                                    });
+
                                     loop {
                                         let v0 = match normal_indices.next() {
                                             Some(v) => v,
@@ -1244,6 +1250,10 @@ impl Interpreter {
                         unwrap_variant!(v[1], Value::Number) as u8,
                         unwrap_variant!(v[2], Value::Number) as u8,
                     )))
+                }),
+                Function::new(&["gray"], &[NodeKind::Number], |_, v| {
+                    let comp = unwrap_variant!(v[0], Value::Number) as u8;
+                    Ok(Value::Color(Color::new(comp, comp, comp)))
                 }),
                 Function::new(&["hsv"], &[NodeKind::Number, NodeKind::Number, NodeKind::Number], |_, v| {
                     let (h, s, v) = (
