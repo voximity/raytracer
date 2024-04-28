@@ -1,12 +1,6 @@
 # raytracer
 
-This is a raytracer written in Rust for my apprenticeship project at UW-L.
-
-This project is my current work for my apprenticeship project at the University of Wisconsin-La
-Crosse. It is a rewrite of an [older project](https://github.com/voximity/omegga-raytracer-cr)
-in Rust, designed for maximum performance. Over the course of this school year, I am working with
-Dr. Kenny Hunt to research rendering and optimization techniques as a way to further my
-understanding of high-performance computing, especially with parallelization.
+This is a raytracer written in Rust for an apprenticeship project during my freshman year of college.
 
 ## Crates
 
